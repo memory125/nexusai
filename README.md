@@ -13,7 +13,9 @@
 <br />
 
 **NexusAI** 是一款现代化的 AI 大模型聚合工作台，集成多家模型厂商、智能 Agents、可配置 Skills，
-采用精美的毛玻璃（Glassmorphism）UI 设计，提供 13 套主题风格，支持本地 Ollama 模型部署。
+采用精美的毛玻璃（Glassmorphism）UI 设计，提供 13 套主题风格，支持本地 Ollama 和 vLLM 模型部署。
+
+> 🔥 **最新更新 v1.3.0**: 新增 vLLM 高性能推理支持、数据持久化、响应式移动端适配、键盘快捷键、Error Boundary 错误处理！
 
 <br />
 
@@ -89,6 +91,7 @@
 | 🟢 MiniMax | abab6.5s, abab6.5, abab5.5 | ☁️ 云端 |
 | 🔷 DeepSeek | DeepSeek-V3, DeepSeek-R1, DeepSeek-Coder | ☁️ 云端 |
 | 🦙 Ollama | Llama 3.3, Qwen 2.5, Mistral, DeepSeek R1, Phi-4 等 14 个模型 | 🏠 本地 |
+| ⚡ vLLM | Llama 3.1, Qwen 2.5, DeepSeek V3/R1, Phi-4 等 10 个模型 | 🏠 本地 |
 
 ### 🎨 毛玻璃 UI 设计
 
@@ -96,6 +99,14 @@
 - 动态浮动光晕球体背景（animate 动画）
 - 精细的页面过渡动画（淡入、上滑、悬浮提升）
 - 13 套精美主题（7 深色 + 6 浅色）
+- 📱 响应式设计，支持移动端适配
+
+### ⚡ 性能与体验优化
+
+- 💾 **数据持久化** - 使用 localStorage 自动保存对话历史、用户设置
+- ⌨️ **键盘快捷键** - 支持 Ctrl+Enter 发送、Ctrl+N 新建对话等快捷操作
+- 🛡️ **错误边界** - Error Boundary 捕获错误，防止应用崩溃
+- 🔄 **流式响应** - 支持 SSE 流式输出，实时显示 AI 回复
 
 ### 🔐 用户系统
 
@@ -196,6 +207,18 @@ npm run preview
 
 ---
 
+## ⌨️ 快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Ctrl/Cmd + Enter` | 发送消息 |
+| `Ctrl/Cmd + N` | 新建对话 |
+| `Ctrl/Cmd + /` | 聚焦输入框 |
+| `Ctrl/Cmd + B` | 切换侧边栏 |
+| `Ctrl/Cmd + K` | 搜索对话 |
+
+---
+
 ## 🎨 主题系统
 
 NexusAI 提供 **13 套精心设计的主题**，每套主题包含 30+ 个 CSS 变量，覆盖背景、光晕、毛玻璃、文字、强调色等全部视觉元素。
@@ -271,6 +294,21 @@ ollama serve
 # 4. 在 NexusAI 模型页面配置端点 URL 并测试连接
 ```
 
+#### vLLM 快速开始
+
+```bash
+# 1. 安装 vLLM
+pip install vllm
+
+# 2. 启动服务（默认端口 8000）
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Llama-3.1-8B-Instruct
+
+# 3. 在 NexusAI 模型页面配置 vLLM 端点并测试连接
+```
+
+> ⚡ vLLM 提供比 Ollama 更高的推理性能，支持 PagedAttention 和 Continuous Batching，适合高并发场景。
+
 ---
 
 ## 📁 项目结构
@@ -281,6 +319,8 @@ nexusai/
 ├── 📄 package.json             # 项目配置与依赖
 ├── 📄 vite.config.ts           # Vite 构建配置
 ├── 📄 tsconfig.json            # TypeScript 配置
+├── 📄 .eslintrc.json           # ESLint 配置
+├── 📄 .prettierrc              # Prettier 配置
 ├── 📄 README.md                # 项目文档（本文件）
 ├── 📄 CHANGELOG.md             # 版本变更日志
 ├── 📄 CONTRIBUTING.md          # 贡献指南
@@ -293,15 +333,30 @@ nexusai/
 │   ├── 📄 index.css            # 全局样式 + 主题变量
 │   ├── 📄 store.ts             # Zustand 状态管理
 │   │
-│   └── 📁 components/          # 页面组件
-│       ├── 📄 AuthPage.tsx     # 登录/注册页面
-│       ├── 📄 Sidebar.tsx      # 侧边栏导航
-│       ├── 📄 ChatPage.tsx     # 对话主页面
-│       ├── 📄 AgentsPage.tsx   # Agents 管理
-│       ├── 📄 SkillsPage.tsx   # Skills 配置
-│       ├── 📄 ModelsPage.tsx   # 模型市场
-│       ├── 📄 SettingsPage.tsx  # 设置 + 主题
-│       └── 📄 ProjectPage.tsx  # 项目管理面板
+│   ├── 📁 components/          # 页面组件
+│   │   ├── 📄 AuthPage.tsx     # 登录/注册页面
+│   │   ├── 📄 Sidebar.tsx      # 侧边栏导航
+│   │   ├── 📄 ChatPage.tsx     # 对话主页面
+│   │   ├── 📄 AgentsPage.tsx   # Agents 管理
+│   │   ├── 📄 SkillsPage.tsx   # Skills 配置
+│   │   ├── 📄 ModelsPage.tsx   # 模型市场
+│   │   ├── 📄 SettingsPage.tsx  # 设置 + 主题
+│   │   ├── 📄 ProjectPage.tsx  # 项目管理面板
+│   │   ├── 📄 ErrorBoundary.tsx # 错误边界组件
+│   │   └── 📄 ProviderIcons.tsx # 模型厂商图标
+│   │
+│   ├── 📁 stores/              # 状态管理（持久化）
+│   │   ├── 📄 authStore.ts     # 认证状态
+│   │   └── 📄 uiStore.ts       # UI 状态
+│   │
+│   ├── 📁 services/            # API 服务
+│   │   └── 📄 llmService.ts    # LLM API 服务
+│   │
+│   ├── 📁 hooks/               # 自定义 Hooks
+│   │   └── 📄 useKeyboardShortcuts.ts # 键盘快捷键
+│   │
+│   └── 📁 utils/               # 工具函数
+│       └── 📄 cn.ts            # className 工具
 │
 └── 📁 public/                  # 静态资源目录
 ```
@@ -316,8 +371,10 @@ nexusai/
 | [TypeScript](https://www.typescriptlang.org/) | 5.9 | 类型安全 |
 | [Vite](https://vitejs.dev/) | 7 | 构建工具 |
 | [Tailwind CSS](https://tailwindcss.com/) | 4 | 原子化样式 |
-| [Zustand](https://zustand-demo.pmnd.rs/) | 5 | 轻量状态管理 |
+| [Zustand](https://zustand-demo.pmnd.rs/) | 5 | 轻量状态管理（支持持久化） |
 | [Lucide React](https://lucide.dev/) | Latest | 图标库 |
+| [ESLint](https://eslint.org/) | 8 | 代码质量检查 |
+| [Prettier](https://prettier.io/) | 3 | 代码格式化 |
 
 ---
 
@@ -359,9 +416,10 @@ git push origin feature/amazing-feature
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
-| **v1.2.0** | 2025-01 | 🦙 Ollama 本地模型支持、📁 项目管理面板 |
-| **v1.1.0** | 2025-01 | 🎨 13 套主题系统（7深色 + 6浅色） |
-| **v1.0.0** | 2025-01 | 🚀 首次发布：对话、Agents、Skills、8 大模型厂商、毛玻璃 UI |
+| **v1.3.0** | 2026-02 | ⚡ vLLM 高性能推理、💾 数据持久化、📱 移动端适配、⌨️ 键盘快捷键、🛡️ Error Boundary |
+| **v1.2.0** | 2026-02 | 🦙 Ollama 本地模型支持、📁 项目管理面板 |
+| **v1.1.0** | 2026-02 | 🎨 13 套主题系统（7深色 + 6浅色） |
+| **v1.0.0** | 2026-02 | 🚀 首次发布：对话、Agents、Skills、8 大模型厂商、毛玻璃 UI |
 
 > 完整变更日志请查看 [CHANGELOG.md](./CHANGELOG.md)
 
