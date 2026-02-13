@@ -9,12 +9,32 @@ export interface User {
   createdAt: string;
 }
 
+export interface RAGSource {
+  chunkId: string;
+  documentId: string;
+  documentName: string;
+  content: string;
+  similarity: number;
+}
+
+export interface RAGPerformanceStats {
+  retrievalTime: number;
+  embeddingTime: number;
+  totalTime: number;
+  chunksSearched: number;
+  chunksRetrieved: number;
+  tokensUsed: number;
+  timestamp: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
   model?: string;
+  ragSources?: RAGSource[];
+  ragStats?: RAGPerformanceStats;
 }
 
 export interface Conversation {
@@ -64,7 +84,7 @@ export interface ModelOption {
   pricing: string;
 }
 
-export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'settings';
+export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'knowledge' | 'settings';
 
 export type ThemeId = 'midnight' | 'aurora' | 'sunset' | 'ocean' | 'forest' | 'rose' | 'cyberpunk' | 'light' | 'light-lavender' | 'light-peach' | 'light-mint' | 'light-sky' | 'light-sand';
 
@@ -534,6 +554,9 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#D97757',
     models: [
+      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', description: '最新旗舰，混合推理模型，1M上下文', contextWindow: '1M', pricing: '$5/M input, $25/M output' },
+      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', description: '顶级编程与Agent能力', contextWindow: '200K', pricing: '$5/M input, $25/M output' },
+      { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', description: '平衡性能与成本的最新选择', contextWindow: '200K', pricing: '$3/M input, $15/M output' },
       { id: 'claude-4-opus', name: 'Claude 4 Opus', description: '最强旗舰，深度推理与创作', contextWindow: '200K', pricing: '$15/M tokens' },
       { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet', description: '平衡性能与成本的首选', contextWindow: '200K', pricing: '$3/M tokens' },
       { id: 'claude-3.5-haiku', name: 'Claude 3.5 Haiku', description: '极速响应，适合实时场景', contextWindow: '200K', pricing: '$0.25/M tokens' },
@@ -546,9 +569,11 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#4285f4',
     models: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: '思考型旗舰，原生多模态', contextWindow: '1M', pricing: '$1.25/M tokens' },
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: '极速思考，性价比之王', contextWindow: '1M', pricing: '$0.15/M tokens' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: '下一代快速推理', contextWindow: '1M', pricing: '$0.1/M tokens' },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: '思考型旗舰，原生多模态，GA稳定版', contextWindow: '1M', pricing: '$1.25/M input, $10/M output' },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: '极速思考，性价比之王', contextWindow: '1M', pricing: '$0.15/M input, $0.60/M output' },
+      { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', description: '超轻量版，最快响应', contextWindow: '1M', pricing: '$0.10/M tokens' },
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: '下一代快速推理', contextWindow: '1M', pricing: '$0.10/M tokens' },
+      { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro', description: '2.0系列专业版', contextWindow: '2M', pricing: '$1.25/M tokens' },
       { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: '百万上下文，长文档处理', contextWindow: '2M', pricing: '$1.25/M tokens' },
       { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: '长上下文快速版', contextWindow: '1M', pricing: '$0.075/M tokens' },
     ],
@@ -559,6 +584,7 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#7c3aed',
     models: [
+      { id: 'qwen3-max', name: 'Qwen3-Max', description: '最新旗舰，超1万亿参数，262K上下文', contextWindow: '262K', pricing: '$1.20/M input, $6/M output' },
       { id: 'qwen3-235b-a22b', name: 'Qwen3-235B-A22B', description: 'MoE旗舰，2350亿参数', contextWindow: '128K', pricing: '¥0.004/千tokens' },
       { id: 'qwen3-32b', name: 'Qwen3-32B', description: '320亿稠密模型，高性能', contextWindow: '128K', pricing: '¥0.002/千tokens' },
       { id: 'qwen3-14b', name: 'Qwen3-14B', description: '轻量高效，适合微调', contextWindow: '128K', pricing: '¥0.001/千tokens' },
@@ -573,6 +599,9 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#3B82F6',
     models: [
+      { id: 'glm-4.7', name: 'GLM-4.7', description: '最新编程专用模型，Agentic能力', contextWindow: '128K', pricing: '$0.50/M tokens' },
+      { id: 'glm-4.6', name: 'GLM-4.6', description: '新一代推理增强模型', contextWindow: '128K', pricing: '$0.50/M tokens' },
+      { id: 'glm-4.5', name: 'GLM-4.5', description: '开源权重，Claude级性能', contextWindow: '128K', pricing: '$0.35/M input, $1/M output' },
       { id: 'glm-4-plus', name: 'GLM-4-Plus', description: '最新旗舰，全面升级', contextWindow: '128K', pricing: '¥0.05/千tokens' },
       { id: 'glm-4-long', name: 'GLM-4-Long', description: '超长上下文，百万tokens', contextWindow: '1M', pricing: '¥0.01/千tokens' },
       { id: 'glm-4-airx', name: 'GLM-4-AirX', description: '极速推理，低延迟', contextWindow: '128K', pricing: '¥0.01/千tokens' },
@@ -586,6 +615,9 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#10B981',
     models: [
+      { id: 'minimax-m2.1', name: 'MiniMax-M2.1', description: '最新多语言编程模型', contextWindow: '1M', pricing: '按量计费' },
+      { id: 'minimax-m2-her', name: 'MiniMax-M2-her', description: '推理增强版', contextWindow: '1M', pricing: '按量计费' },
+      { id: 'minimax-text-01', name: 'MiniMax-Text-01', description: '456B参数MoE模型，1M上下文', contextWindow: '1M', pricing: '$0.20/M input, $1.10/M output' },
       { id: 'minimax-m1', name: 'MiniMax-M1', description: '最新旗舰，推理增强', contextWindow: '1M', pricing: '¥0.01/千tokens' },
       { id: 'abab7', name: 'abab 7', description: '高性能通用模型', contextWindow: '245K', pricing: '¥0.01/千tokens' },
       { id: 'abab6.5s', name: 'abab 6.5s', description: '高性价比选择', contextWindow: '245K', pricing: '¥0.005/千tokens' },
@@ -598,9 +630,11 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#4F8FF7',
     models: [
-      { id: 'deepseek-r1', name: 'DeepSeek-R1', description: '推理旗舰，思维链超强', contextWindow: '128K', pricing: '¥4/M tokens' },
+      { id: 'deepseek-v3.2', name: 'DeepSeek-V3.2', description: '最新通用版本，128K上下文', contextWindow: '128K', pricing: '$0.28/M input, $0.42/M output' },
+      { id: 'deepseek-v3.1', name: 'DeepSeek-V3.1', description: 'V3升级，增强推理能力', contextWindow: '128K', pricing: '$0.14/M input, $0.28/M output' },
+      { id: 'deepseek-r1', name: 'DeepSeek-R1', description: '推理旗舰，思维链超强', contextWindow: '128K', pricing: '$0.55/M input, $2.19/M output' },
       { id: 'deepseek-r1-0528', name: 'DeepSeek-R1-0528', description: '最新推理版本，性能提升', contextWindow: '128K', pricing: '¥4/M tokens' },
-      { id: 'deepseek-v3-0324', name: 'DeepSeek-V3-0324', description: '最新通用版本', contextWindow: '128K', pricing: '¥1/M tokens' },
+      { id: 'deepseek-v3-0324', name: 'DeepSeek-V3-0324', description: '通用版本0324', contextWindow: '128K', pricing: '¥1/M tokens' },
       { id: 'deepseek-v3', name: 'DeepSeek-V3', description: '通用对话旗舰', contextWindow: '128K', pricing: '¥1/M tokens' },
       { id: 'deepseek-r1-distill-qwen-32b', name: 'DeepSeek-R1-Distill-32B', description: '蒸馏推理版，轻量高效', contextWindow: '128K', pricing: '¥1/M tokens' },
     ],
@@ -617,8 +651,10 @@ export const modelProviders: ModelProvider[] = [
       { id: 'qwen2.5:72b', name: 'Qwen 2.5 72B', description: '通义千问开源版，中文能力出色', contextWindow: '128K', pricing: '本地免费' },
       { id: 'qwen2.5:14b', name: 'Qwen 2.5 14B', description: '中等尺寸，平衡性能与资源', contextWindow: '128K', pricing: '本地免费' },
       { id: 'qwen2.5-coder:latest', name: 'Qwen 2.5 Coder', description: '专为编程优化的代码模型', contextWindow: '128K', pricing: '本地免费' },
+      { id: 'qwen3:32b', name: 'Qwen3 32B', description: 'Qwen3开源版，320亿参数', contextWindow: '128K', pricing: '本地免费' },
       { id: 'deepseek-r1:latest', name: 'DeepSeek R1', description: '开源推理模型，思维链能力强', contextWindow: '128K', pricing: '本地免费' },
       { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', description: '蒸馏版推理模型，轻量快速', contextWindow: '128K', pricing: '本地免费' },
+      { id: 'deepseek-v3:latest', name: 'DeepSeek V3', description: 'DeepSeek通用模型，671B MoE', contextWindow: '128K', pricing: '本地免费' },
       { id: 'mistral:latest', name: 'Mistral 7B', description: '高效紧凑的欧洲开源模型', contextWindow: '32K', pricing: '本地免费' },
       { id: 'mixtral:latest', name: 'Mixtral 8x7B', description: 'MoE架构，专家混合高效推理', contextWindow: '32K', pricing: '本地免费' },
       { id: 'gemma2:latest', name: 'Gemma 2', description: 'Google轻量级开源模型', contextWindow: '8K', pricing: '本地免费' },
@@ -633,11 +669,14 @@ export const modelProviders: ModelProvider[] = [
     logo: '⚡',
     color: '#7c3aed',
     models: [
+      { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B', description: 'Meta最新旗舰，综合能力最强', contextWindow: '128K', pricing: '本地免费' },
       { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'Llama 3.1 8B', description: 'Meta 官方 Instruct 版本，适合对话', contextWindow: '128K', pricing: '本地免费' },
       { id: 'meta-llama/Llama-3.1-70B-Instruct', name: 'Llama 3.1 70B', description: '大参数版本，推理性能强', contextWindow: '128K', pricing: '本地免费' },
+      { id: 'Qwen/Qwen3-32B', name: 'Qwen3 32B', description: 'Qwen3 开源版，高性能推理', contextWindow: '128K', pricing: '本地免费' },
       { id: 'Qwen/Qwen2.5-7B-Instruct', name: 'Qwen 2.5 7B', description: '阿里通义千问，中文优化', contextWindow: '128K', pricing: '本地免费' },
       { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B', description: '大参数版本，综合能力突出', contextWindow: '128K', pricing: '本地免费' },
-      { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3', description: 'DeepSeek 最新通用模型', contextWindow: '128K', pricing: '本地免费' },
+      { id: 'deepseek-ai/DeepSeek-V3.1', name: 'DeepSeek V3.1', description: 'DeepSeek 最新通用版本', contextWindow: '128K', pricing: '本地免费' },
+      { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3', description: 'DeepSeek 通用模型', contextWindow: '128K', pricing: '本地免费' },
       { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1', description: '推理增强版，思维链能力', contextWindow: '128K', pricing: '本地免费' },
       { id: 'microsoft/Phi-4', name: 'Phi-4', description: '微软小模型，推理能力优秀', contextWindow: '16K', pricing: '本地免费' },
       { id: 'mistralai/Mistral-7B-Instruct-v0.3', name: 'Mistral 7B', description: '欧洲开源模型，高效紧凑', contextWindow: '32K', pricing: '本地免费' },

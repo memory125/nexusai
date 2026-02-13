@@ -8,6 +8,7 @@ import { SkillsPage } from './components/SkillsPage';
 import { ModelsPage } from './components/ModelsPage';
 import { SettingsPage } from './components/SettingsPage';
 import { ProjectPage } from './components/ProjectPage';
+import { KnowledgeBasePage } from './components/KnowledgeBasePage';
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { theme } = useStore();
@@ -67,6 +68,7 @@ function MainLayout() {
       case 'chat': return <ChatPage />;
       case 'agents': return <AgentsPage />;
       case 'skills': return <SkillsPage />;
+      case 'knowledge': return <KnowledgeBasePage />;
       case 'models': return <ModelsPage />;
       case 'project': return <ProjectPage />;
       case 'settings': return <SettingsPage />;

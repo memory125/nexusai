@@ -1,7 +1,188 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore, modelProviders } from '../store';
-import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle } from 'lucide-react';
+import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
+import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
+import { RAGService } from '../services/ragService';
+
+// RAG Sources Component - displays retrieved document chunks with performance stats
+function RAGSources({ 
+  sources, 
+  stats 
+}: { 
+  sources: Array<{ chunkId: string; documentId: string; documentName: string; content: string; similarity: number }>;
+  stats?: { retrievalTime: number; embeddingTime: number; totalTime: number; chunksSearched: number; chunksRetrieved: number; tokensUsed: number; timestamp: number };
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<typeof sources[0] | null>(null);
+  const [showStats, setShowStats] = useState(false);
+
+  if (!sources || sources.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--t-glass-border)' }}>
+      {/* Header */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-2 text-xs font-medium w-full hover:opacity-80 transition-opacity"
+        style={{ color: 'var(--t-accent-light)' }}
+      >
+        <Database className="h-3.5 w-3.5" />
+        <span>检索来源 ({sources.length} 个相关片段)</span>
+        {isExpanded ? (
+          <ChevronUp className="h-3.5 w-3.5 ml-auto" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 ml-auto" />
+        )}
+      </button>
+
+      {/* Collapsed View - Show count badges */}
+      {!isExpanded && (
+        <div className="flex flex-wrap gap-2 mt-2">
+          {sources.slice(0, 3).map((source, idx) => (
+            <span
+              key={source.chunkId}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px]"
+              style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent)' }}
+            >
+              <FileText className="h-3 w-3" />
+              [{idx + 1}] {source.documentName}
+              <span className="opacity-70">({Math.round(source.similarity * 100)}%)</span>
+            </span>
+          ))}
+          {sources.length > 3 && (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded text-[10px]"
+              style={{ background: 'var(--t-glass-card)', color: 'var(--t-text-muted)' }}
+            >
+              +{sources.length - 3} more
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Performance Stats - Collapsed View */}
+      {!isExpanded && stats && (
+        <div className="flex items-center gap-3 mt-2 text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+            {stats.totalTime}ms
+          </span>
+          <span>·</span>
+          <span>{stats.chunksSearched} 个片段</span>
+          <span>·</span>
+          <span>~{stats.tokensUsed} tokens</span>
+        </div>
+      )}
+
+      {/* Expanded View - Show all sources */}
+      {isExpanded && (
+        <div className="mt-3 space-y-2">
+          {/* Performance Stats Bar */}
+          {stats && (
+            <div 
+              className="glass-card rounded-lg p-3 mb-3"
+              style={{ background: 'var(--t-accent-subtle)' }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium" style={{ color: 'var(--t-text)' }}>
+                  检索性能统计
+                </span>
+                <button
+                  onClick={() => setShowStats(!showStats)}
+                  className="text-[10px] hover:underline"
+                  style={{ color: 'var(--t-accent)' }}
+                >
+                  {showStats ? '收起' : '详情'}
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 rounded" style={{ background: 'var(--t-glass-card)' }}>
+                  <div className="text-lg font-bold" style={{ color: 'var(--t-accent)' }}>
+                    {stats.totalTime}<span className="text-xs font-normal">ms</span>
+                  </div>
+                  <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>总耗时</div>
+                </div>
+                <div className="p-2 rounded" style={{ background: 'var(--t-glass-card)' }}>
+                  <div className="text-lg font-bold" style={{ color: 'var(--t-accent)' }}>
+                    {stats.chunksRetrieved}<span className="text-xs font-normal">/{stats.chunksSearched}</span>
+                  </div>
+                  <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>检索片段</div>
+                </div>
+                <div className="p-2 rounded" style={{ background: 'var(--t-glass-card)' }}>
+                  <div className="text-lg font-bold" style={{ color: 'var(--t-accent)' }}>
+                    ~{stats.tokensUsed}
+                  </div>
+                  <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>Tokens</div>
+                </div>
+              </div>
+              {showStats && (
+                <div className="mt-3 pt-3 border-t space-y-1" style={{ borderColor: 'var(--t-glass-border)' }}>
+                  <div className="flex justify-between text-xs">
+                    <span style={{ color: 'var(--t-text-muted)' }}>Embedding 生成</span>
+                    <span style={{ color: 'var(--t-text)' }}>{stats.embeddingTime}ms</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span style={{ color: 'var(--t-text-muted)' }}>向量检索</span>
+                    <span style={{ color: 'var(--t-text)' }}>{stats.retrievalTime}ms</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span style={{ color: 'var(--t-text-muted)' }}>检索时间</span>
+                    <span style={{ color: 'var(--t-text)' }}>
+                      {new Date(stats.timestamp).toLocaleTimeString('zh-CN')}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {sources.map((source, idx) => (
+            <div
+              key={source.chunkId}
+              onClick={() => setSelectedSource(selectedSource?.chunkId === source.chunkId ? null : source)}
+              className="glass-card rounded-lg p-3 cursor-pointer transition-all hover:opacity-90"
+              style={{ borderLeft: `3px solid var(--t-accent)` }}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold"
+                    style={{ background: 'var(--t-accent)', color: 'white' }}
+                  >
+                    {idx + 1}
+                  </span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--t-text)' }}>
+                    {source.documentName}
+                  </span>
+                </div>
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded"
+                  style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent)' }}
+                >
+                  相似度 {Math.round(source.similarity * 100)}%
+                </span>
+              </div>
+              <p
+                className="text-xs leading-relaxed line-clamp-2"
+                style={{ color: 'var(--t-text-secondary)' }}
+              >
+                {source.content}
+              </p>
+              {selectedSource?.chunkId === source.chunkId && (
+                <div className="mt-2 pt-2 border-t" style={{ borderColor: 'var(--t-glass-border)' }}>
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--t-text-secondary)' }}>
+                    {source.content}
+                  </p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ChatPage() {
   const {
@@ -11,24 +192,65 @@ export function ChatPage() {
     activeAgent,
   } = useStore();
 
+  const {
+    getSelectedKnowledgeBases,
+    getSelectedChunks,
+    embeddingConfig,
+  } = useKnowledgeBaseStore();
+
   const [input, setInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const activeConv = conversations.find(c => c.id === activeConversationId);
+  const selectedKBs = getSelectedKnowledgeBases();
+  const selectedChunks = getSelectedChunks();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeConv?.messages]);
 
-  const handleSend = () => {
+
+
+  const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
     let convId = activeConversationId;
     if (!convId) {
       convId = createConversation(activeAgent?.id);
     }
-    addMessage(convId!, { role: 'user', content: input.trim() });
+    
+    let content = input.trim();
+    let ragSources: Array<{ chunkId: string; documentId: string; documentName: string; content: string; similarity: number }> | null = null;
+    let ragStats: { retrievalTime: number; embeddingTime: number; totalTime: number; chunksSearched: number; chunksRetrieved: number; tokensUsed: number; timestamp: number } | null = null;
+    
+    // If knowledge bases are selected, retrieve relevant chunks from all selected KBs
+    if (selectedChunks.length > 0) {
+      const ragService = new RAGService(embeddingConfig);
+      const searchResult = await ragService.searchRelevantChunks(
+        content,
+        selectedChunks,
+        5 // Increase topK for multi-KB search
+      );
+      if (searchResult.results.length > 0) {
+        const ragContext = RAGService.buildRAGContext(searchResult.results);
+        content = `${ragContext}\n\n---\n\n用户问题：${content}`;
+        
+        // Save RAG sources for display
+        ragSources = searchResult.results.map(result => ({
+          chunkId: result.chunk.id,
+          documentId: result.chunk.metadata.documentId,
+          documentName: result.chunk.metadata.documentName,
+          content: result.chunk.content,
+          similarity: result.score,
+        }));
+        
+        // Save performance stats
+        ragStats = searchResult.stats;
+      }
+    }
+    
+    addMessage(convId!, { role: 'user', content, ragSources: ragSources || undefined, ragStats: ragStats || undefined });
     setInput('');
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
@@ -237,6 +459,19 @@ export function ChatPage() {
           <div className="flex items-center justify-between px-2 pt-1 mt-1" style={{ borderTop: '1px solid var(--t-glass-border)' }}>
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--t-text-muted)' }}><ProviderIcon id={selectedProvider} size={12} /> {currentModel?.name}</span>
+              {selectedKBs.length > 0 && (
+                <span 
+                  className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded cursor-help" 
+                  style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}
+                  title={selectedKBs.map(kb => kb.name).join(', ')}
+                >
+                  <Database className="h-3 w-3" />
+                  {selectedKBs.length === 1 
+                    ? selectedKBs[0].name 
+                    : `${selectedKBs.length} 个知识库`
+                  }
+                </span>
+              )}
             </div>
             <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>{input.length} 字符</span>
           </div>
@@ -288,7 +523,13 @@ export function ChatPage() {
                 {msg.role === 'user' ? (
                   <p className="whitespace-pre-wrap">{msg.content}</p>
                 ) : (
-                  <div className="whitespace-pre-wrap">{renderContent(msg.content)}</div>
+                  <>
+                    <div className="whitespace-pre-wrap">{renderContent(msg.content)}</div>
+                    {/* Display RAG sources for assistant messages */}
+                    {msg.ragSources && msg.ragSources.length > 0 && (
+                      <RAGSources sources={msg.ragSources} stats={msg.ragStats} />
+                    )}
+                  </>
                 )}
                 {msg.model && msg.role === 'assistant' && (
                   <p className="mt-2 text-[10px] pt-1.5" style={{ borderTop: '1px solid var(--t-glass-border)', color: 'var(--t-text-muted)' }}>{msg.model}</p>
