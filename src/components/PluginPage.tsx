@@ -7,15 +7,12 @@ import {
   Trash2,
   Settings,
   RefreshCw,
-  Check,
   X,
   Search,
-  Star,
   TrendingUp,
   Award,
   Grid,
   List,
-  ChevronRight,
   ExternalLink,
   Shield,
   AlertCircle,
@@ -23,6 +20,7 @@ import {
   Square,
   Package,
   Plus,
+  ArrowUpDown,
 } from 'lucide-react';
 
 const categories: { id: PluginCategory | 'all'; label: string }[] = [
@@ -56,7 +54,6 @@ export function PluginPage() {
     searchMarketplace,
     getFeaturedPlugins,
     getTrendingPlugins,
-    getPluginsByCategory,
     checkUpdateAvailable,
   } = usePluginStore();
 
@@ -66,6 +63,8 @@ export function PluginPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedPlugin, setSelectedPlugin] = useState<PluginManifest | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [sortBy, setSortBy] = useState<'downloads' | 'rating' | 'newest' | 'name'>('downloads');
+  const [installedSearchQuery, setInstalledSearchQuery] = useState('');
 
   // Load marketplace on mount
   useEffect(() => {
@@ -115,21 +114,35 @@ export function PluginPage() {
     }
   };
 
-  const renderStars = (rating: number) => {
-    return (
-      <div className="flex items-center gap-0.5">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            className={`h-3 w-3 ${
-              star <= Math.round(rating)
-                ? 'fill-yellow-400 text-yellow-400'
-                : 'text-white/20'
-            }`}
-          />
-        ))}
-      </div>
-    );
+  // Sort plugins
+  const sortPlugins = (plugins: MarketplacePlugin[]) => {
+    const sorted = [...plugins];
+    switch (sortBy) {
+      case 'downloads':
+        return sorted.sort((a, b) => b.downloads - a.downloads);
+      case 'rating':
+        return sorted.sort((a, b) => b.rating - a.rating);
+      case 'newest':
+        return sorted.sort((a, b) => new Date(b.manifest.version).getTime() - new Date(a.manifest.version).getTime());
+      case 'name':
+        return sorted.sort((a, b) => a.manifest.name.localeCompare(b.manifest.name));
+      default:
+        return sorted;
+    }
+  };
+
+  // Filter installed plugins
+  const getFilteredInstalledPlugins = () => {
+    let result = plugins;
+    if (installedSearchQuery) {
+      const query = installedSearchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.manifest.name.toLowerCase().includes(query) ||
+          p.manifest.description.toLowerCase().includes(query)
+      );
+    }
+    return result;
   };
 
   return (
@@ -196,6 +209,20 @@ export function PluginPage() {
 
         {activeTab === 'marketplace' && (
           <div className="flex items-center gap-2">
+            {/* Sort Dropdown */}
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="appearance-none pl-3 pr-8 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50 cursor-pointer"
+              >
+                <option value="downloads" className="bg-slate-900">最多下载</option>
+                <option value="rating" className="bg-slate-900">最高评分</option>
+                <option value="newest" className="bg-slate-900">最新版本</option>
+                <option value="name" className="bg-slate-900">名称</option>
+              </select>
+              <ArrowUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-white/40 pointer-events-none" />
+            </div>
             <button
               onClick={() => setViewMode('grid')}
               className={`p-2 rounded-lg transition-all ${
@@ -297,10 +324,10 @@ export function PluginPage() {
             {/* All Plugins */}
             <div>
               <h3 className="text-sm font-medium text-white/80 mb-3">
-                {searchQuery ? '搜索结果' : '全部插件'}
+                {searchQuery ? `搜索结果 (${getFilteredPlugins().length})` : `全部插件 (${getFilteredPlugins().length})`}
               </h3>
               <div className={viewMode === 'grid' ? 'grid grid-cols-3 gap-4' : 'space-y-2'}>
-                {getFilteredPlugins().map((plugin) => (
+                {sortPlugins(getFilteredPlugins()).map((plugin) => (
                   <PluginCard
                     key={plugin.manifest.id}
                     plugin={plugin}
@@ -318,19 +345,35 @@ export function PluginPage() {
 
         {activeTab === 'installed' && (
           <div className="space-y-4">
-            {plugins.length === 0 ? (
+            {/* Search Installed Plugins */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+              <input
+                type="text"
+                value={installedSearchQuery}
+                onChange={(e) => setInstalledSearchQuery(e.target.value)}
+                placeholder="搜索已安装插件..."
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-blue-500/50"
+              />
+            </div>
+            
+            {getFilteredInstalledPlugins().length === 0 ? (
               <div className="text-center py-12">
                 <Package className="h-12 w-12 mx-auto text-white/20 mb-4" />
-                <p className="text-white/60">还没有安装任何插件</p>
-                <button
-                  onClick={() => setActiveTab('marketplace')}
-                  className="mt-4 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-all"
-                >
-                  浏览插件市场
-                </button>
+                <p className="text-white/60">
+                  {installedSearchQuery ? '没有找到匹配的插件' : '还没有安装任何插件'}
+                </p>
+                {!installedSearchQuery && (
+                  <button
+                    onClick={() => setActiveTab('marketplace')}
+                    className="mt-4 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-all"
+                  >
+                    浏览插件市场
+                  </button>
+                )}
               </div>
             ) : (
-              plugins.map((plugin) => (
+              getFilteredInstalledPlugins().map((plugin) => (
                 <div
                   key={plugin.manifest.id}
                   className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10"
@@ -478,6 +521,18 @@ export function PluginPage() {
               >
                 <X className="h-5 w-5 text-white/60" />
               </button>
+            </div>
+
+            {/* Stats */}
+            <div className="flex items-center gap-4 mb-4 p-3 rounded-lg bg-white/5">
+              <div className="flex items-center gap-1.5 text-white/70">
+                <Download className="h-4 w-4" />
+                <span className="text-sm">{formatDownloads(marketplaceCache.find(p => p.manifest.id === selectedPlugin.id)?.downloads || 0)} 次下载</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-white/70">
+                <TrendingUp className="h-4 w-4" />
+                <span className="text-sm">{marketplaceCache.find(p => p.manifest.id === selectedPlugin.id)?.rating.toFixed(1) || '0.0'} 评分</span>
+              </div>
             </div>
 
             <p className="text-white/80 mb-6">{selectedPlugin.description}</p>
@@ -659,7 +714,18 @@ function PluginCard({ plugin, installed, installing, onInstall, onClick, compact
         )}
       </div>
       <h4 className="font-medium text-white mb-1">{plugin.manifest.name}</h4>
-      <p className="text-sm text-white/50 mb-3 line-clamp-2">{plugin.manifest.description}</p>
+      <p className="text-sm text-white/50 mb-2 line-clamp-2">{plugin.manifest.description}</p>
+      {/* Category Tags */}
+      <div className="flex flex-wrap gap-1 mb-3">
+        {plugin.manifest.categories.slice(0, 2).map((cat) => (
+          <span key={cat} className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/50">
+            {cat}
+          </span>
+        ))}
+        <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/50">
+          v{plugin.manifest.version}
+        </span>
+      </div>
       <div className="flex items-center justify-between text-xs text-white/40">
         <span>{plugin.manifest.author}</span>
         <div className="flex items-center gap-2">
