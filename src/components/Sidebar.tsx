@@ -1,7 +1,7 @@
 import { useStore } from '../store';
 import {
   MessageSquare, Bot, Zap, Cpu, Settings, Plus, Trash2,
-  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, FolderGit2, Database
+  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, FolderGit2, Database, Plug
 } from 'lucide-react';
 import type { Page } from '../store';
 
@@ -12,6 +12,7 @@ const navItems: { id: Page; label: string; icon: React.ReactNode }[] = [
   { id: 'knowledge', label: '知识库', icon: <Database className="h-4.5 w-4.5" /> },
   { id: 'models', label: '模型', icon: <Cpu className="h-4.5 w-4.5" /> },
   { id: 'project', label: '项目', icon: <FolderGit2 className="h-4.5 w-4.5" /> },
+  { id: 'mcp', label: 'MCP', icon: <Plug className="h-4.5 w-4.5" /> },
   { id: 'settings', label: '设置', icon: <Settings className="h-4.5 w-4.5" /> },
 ];
 
