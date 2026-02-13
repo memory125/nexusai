@@ -34,6 +34,11 @@ const categories: { id: PluginCategory | 'all'; label: string }[] = [
   { id: 'utility', label: '实用工具' },
 ];
 
+const formatDownloads = (n: number) => {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return n.toString();
+};
+
 export function PluginPage() {
   const {
     plugins,
@@ -108,11 +113,6 @@ export function PluginPage() {
     } else {
       await activatePlugin(plugin.manifest.id);
     }
-  };
-
-  const formatDownloads = (n: number) => {
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-    return n.toString();
   };
 
   const renderStars = (rating: number) => {
