@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore, modelProviders } from '../store';
-import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText } from 'lucide-react';
+import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, Image, File, X, Play, Pause, Volume2 } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
 import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
 import { RAGService } from '../services/ragService';
+import { multimodalService } from '../services/multimodalService';
+import type { Attachment } from '../types/multimodal';
+import { formatFileSize } from '../types/multimodal';
 
 // RAG Sources Component - displays retrieved document chunks with performance stats
 function RAGSources({ 
@@ -200,8 +203,12 @@ export function ChatPage() {
 
   const [input, setInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeConv = conversations.find(c => c.id === activeConversationId);
   const selectedKBs = getSelectedKnowledgeBases();
@@ -211,10 +218,58 @@ export function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeConv?.messages]);
 
+  
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
+  // File handling
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    const newAttachments = await multimodalService.processFiles(files);
+    setAttachments(prev => [...prev, ...newAttachments]);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  // Voice recording
+  const voiceRecordingRef = useRef<{ stop: () => void; audio: HTMLAudioElement } | null>(null);
+
+  const handleVoiceRecord = async () => {
+    if (isRecording) {
+      // Stop recording
+      if (voiceRecordingRef.current) {
+        voiceRecordingRef.current.stop();
+        voiceRecordingRef.current = null;
+      }
+      setIsRecording(false);
+    } else {
+      // Start recording
+      try {
+        voiceRecordingRef.current = await multimodalService.startVoiceRecording();
+        setIsRecording(true);
+      } catch (error) {
+        console.error('Failed to start recording:', error);
+      }
+    }
+  };
+
+  // Update handleSend to include attachments
   const handleSend = async () => {
-    if (!input.trim() || isGenerating) return;
+    if ((!input.trim() && attachments.length === 0) || isGenerating) return;
     let convId = activeConversationId;
     if (!convId) {
       convId = createConversation(activeAgent?.id);
@@ -230,13 +285,12 @@ export function ChatPage() {
       const searchResult = await ragService.searchRelevantChunks(
         content,
         selectedChunks,
-        5 // Increase topK for multi-KB search
+        5
       );
       if (searchResult.results.length > 0) {
         const ragContext = RAGService.buildRAGContext(searchResult.results);
         content = `${ragContext}\n\n---\n\n用户问题：${content}`;
         
-        // Save RAG sources for display
         ragSources = searchResult.results.map(result => ({
           chunkId: result.chunk.id,
           documentId: result.chunk.metadata.documentId,
@@ -245,22 +299,21 @@ export function ChatPage() {
           similarity: result.score,
         }));
         
-        // Save performance stats
         ragStats = searchResult.stats;
       }
     }
     
-    addMessage(convId!, { role: 'user', content, ragSources: ragSources || undefined, ragStats: ragStats || undefined });
+    addMessage(convId!, { 
+      role: 'user', 
+      content, 
+      attachments: attachments.length > 0 ? attachments : undefined,
+      ragSources: ragSources || undefined, 
+      ragStats: ragStats || undefined 
+    });
     setInput('');
+    setAttachments([]);
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
     }
   };
 
@@ -425,8 +478,48 @@ export function ChatPage() {
     return (
       <div className="p-4 pt-2">
         <div className="glass-strong rounded-2xl p-2 max-w-3xl mx-auto">
+          {/* Attachment Preview */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2 p-2">
+              {attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 text-white text-sm"
+                >
+                  {attachment.type === 'image' && attachment.localUrl && (
+                    <img src={attachment.localUrl} alt={attachment.name} className="w-8 h-8 rounded object-cover" />
+                  )}
+                  {attachment.type === 'audio' && <Volume2 className="w-4 h-4" />}
+                  {attachment.type === 'video' && <Play className="w-4 h-4" />}
+                  {attachment.type === 'file' && <FileText className="w-4 h-4" />}
+                  <span className="text-xs max-w-[100px] truncate">{attachment.name}</span>
+                  <span className="text-[10px] opacity-60">{formatFileSize(attachment.size)}</span>
+                  <button
+                    onClick={() => handleRemoveAttachment(attachment.id)}
+                    className="ml-1 hover:text-red-400"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          
           <div className="flex items-end gap-2">
-            <button className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all mb-0.5" style={{ color: 'var(--t-text-muted)' }}>
+            {/* File Upload Button */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              multiple
+              accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.txt,.md"
+              className="hidden"
+            />
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all mb-0.5 hover:text-white"
+              style={{ color: 'var(--t-text-muted)' }}
+            >
               <Paperclip className="h-4 w-4" />
             </button>
             <textarea
@@ -439,7 +532,13 @@ export function ChatPage() {
               className="flex-1 resize-none bg-transparent py-2.5 text-sm focus:outline-none"
               style={{ color: 'var(--t-text)', maxHeight: 200 }}
             />
-            <button className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all mb-0.5" style={{ color: 'var(--t-text-muted)' }}>
+            {/* Voice Recording Button */}
+            <button 
+              onClick={handleVoiceRecord}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all mb-0.5 ${isRecording ? 'text-red-400 animate-pulse' : 'hover:text-white'}`}
+              style={{ color: 'var(--t-text-muted)' }}
+              title={isRecording ? '点击停止录音' : '语音输入'}
+            >
               <Mic className="h-4 w-4" />
             </button>
             {isGenerating ? (
@@ -449,7 +548,7 @@ export function ChatPage() {
             ) : (
               <button
                 onClick={handleSend}
-                disabled={!input.trim()}
+                disabled={!input.trim() && attachments.length === 0}
                 className="glass-btn-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-xl disabled:opacity-30 mb-0.5"
               >
                 <Send className="h-4 w-4" />
@@ -473,7 +572,7 @@ export function ChatPage() {
                 </span>
               )}
             </div>
-            <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>{input.length} 字符</span>
+            <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>{input.length} 字符 {attachments.length > 0 && `· ${attachments.length} 个附件`}</span>
           </div>
         </div>
       </div>
@@ -520,9 +619,43 @@ export function ChatPage() {
                   background: `linear-gradient(135deg, var(--t-user-msg-from), var(--t-user-msg-to))`,
                 } : { color: 'var(--t-text)' }}
               >
-                {msg.role === 'user' ? (
+              {msg.role === 'user' ? (
+                <>
+                  {/* Render attachments */}
+                  {msg.attachments && msg.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {msg.attachments.map((attachment) => (
+                        <div key={attachment.id} className="relative group">
+                          {attachment.type === 'image' && attachment.localUrl && (
+                            <img 
+                              src={attachment.localUrl} 
+                              alt={attachment.name}
+                              className="max-w-[200px] max-h-[200px] rounded-lg object-cover"
+                            />
+                          )}
+                          {attachment.type === 'audio' && attachment.localUrl && (
+                            <audio controls src={attachment.localUrl} className="h-8" />
+                          )}
+                          {attachment.type === 'video' && attachment.localUrl && (
+                            <video 
+                              controls 
+                              src={attachment.localUrl} 
+                              className="max-w-[300px] max-h-[200px] rounded-lg"
+                            />
+                          )}
+                          {attachment.type === 'file' && (
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10">
+                              <FileText className="w-4 h-4" />
+                              <span className="text-xs">{attachment.name}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <p className="whitespace-pre-wrap">{msg.content}</p>
-                ) : (
+                </>
+              ) : (
                   <>
                     <div className="whitespace-pre-wrap">{renderContent(msg.content)}</div>
                     {/* Display RAG sources for assistant messages */}

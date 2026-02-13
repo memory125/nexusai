@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import type { Attachment } from './types/multimodal';
 
 export interface User {
   id: string;
@@ -31,6 +31,7 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  attachments?: Attachment[];
   timestamp: number;
   model?: string;
   ragSources?: RAGSource[];
