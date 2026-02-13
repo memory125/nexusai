@@ -10,6 +10,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { ProjectPage } from './components/ProjectPage';
 import { KnowledgeBasePage } from './components/KnowledgeBasePage';
 import { MCPPage } from './components/MCPPage';
+import { PluginPage } from './components/PluginPage';
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { theme } = useStore();
@@ -73,6 +74,7 @@ function MainLayout() {
       case 'models': return <ModelsPage />;
       case 'project': return <ProjectPage />;
       case 'mcp': return <MCPPage />;
+      case 'plugins': return <PluginPage />;
       case 'settings': return <SettingsPage />;
       default: return <ChatPage />;
     }
