@@ -1,0 +1,31 @@
+[package]
+name = "nexusai"
+version = "1.4.0"
+description = "智能大模型工作台 - AI Desktop Application"
+authors = ["NexusAI Team"]
+license = "MIT"
+repository = "https://github.com/nexusai/nexusai"
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.6", features = ["shell-open", "http-request", "notification-all", "clipboard-all", "dialog-all", "fs-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+anyhow = "1.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
