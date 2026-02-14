@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../store';
 import {
   MessageSquare, Bot, Zap, Cpu, Settings, Plus, Trash2,
-  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, ChevronDown, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive, Globe2, Users, Folder, MoreVertical, Edit2, FolderPlus
+  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, ChevronDown, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive, Globe2, Users, Folder, MoreVertical, Edit2, FolderPlus, Pin
 } from 'lucide-react';
 import type { Page } from '../store';
 
@@ -34,6 +34,7 @@ export function Sidebar() {
     conversations, activeConversationId, setActiveConversation,
     createConversation, deleteConversation, user, logout,
     folders, createFolder, deleteFolder, updateFolder, moveToFolder,
+    pinConversation, unpinConversation,
   } = useStore();
 
   const toggleFolder = (folderId: string) => {
@@ -161,6 +162,50 @@ export function Sidebar() {
               </div>
             )}
 
+            {/* Pinned Conversations */}
+            {(() => {
+              const pinnedConvs = conversations.filter(c => c.pinned);
+              if (pinnedConvs.length > 0) {
+                return (
+                  <div className="mb-2">
+                    <div className="mb-1 px-3 py-1 text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                      已置顶
+                    </div>
+                    {pinnedConvs.map(conv => (
+                      <div
+                        key={conv.id}
+                        onClick={() => setActiveConversation(conv.id)}
+                        className="group flex items-center gap-2 rounded-lg px-3 py-2 text-xs cursor-pointer mb-0.5 transition-all"
+                        style={{
+                          background: activeConversationId === conv.id ? 'var(--t-sidebar-active)' : 'transparent',
+                          color: activeConversationId === conv.id ? 'var(--t-text)' : 'var(--t-text-secondary)',
+                        }}
+                      >
+                        <Pin className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                        <span className="flex-1 truncate">{conv.title}</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); unpinConversation(conv.id); }}
+                          className="hidden h-5 w-5 items-center justify-center rounded hover:text-amber-400 group-hover:flex transition-all"
+                          style={{ color: 'var(--t-text-muted)' }}
+                          title="取消置顶"
+                        >
+                          <Pin className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}
+                          className="hidden h-5 w-5 items-center justify-center rounded hover:text-red-400 group-hover:flex transition-all"
+                          style={{ color: 'var(--t-text-muted)' }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {conversations.length === 0 && folders.length === 0 && (
               <p className="px-3 py-4 text-xs text-center" style={{ color: 'var(--t-text-muted)' }}>暂无对话记录</p>
             )}
@@ -272,6 +317,14 @@ export function Sidebar() {
                   >
                     <MessageSquare className="h-3.5 w-3.5 shrink-0" />
                     <span className="flex-1 truncate">{conv.title}</span>
+                    <button
+                      onClick={e => { e.stopPropagation(); pinConversation(conv.id); }}
+                      className="hidden h-5 w-5 items-center justify-center rounded hover:text-amber-400 group-hover:flex transition-all"
+                      style={{ color: 'var(--t-text-muted)' }}
+                      title="置顶"
+                    >
+                      <Pin className="h-3 w-3" />
+                    </button>
                     <button
                       onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}
                       className="hidden h-5 w-5 items-center justify-center rounded hover:text-red-400 group-hover:flex transition-all"

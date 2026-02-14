@@ -48,6 +48,7 @@ export interface Conversation {
   provider: string;
   agentId?: string;
   folderId?: string;
+  pinned?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -222,6 +223,10 @@ interface AppState {
   deleteFolder: (id: string) => void;
   updateFolder: (id: string, updates: Partial<Pick<ChatFolder, 'name' | 'color'>>) => void;
   moveToFolder: (conversationId: string, folderId?: string) => void;
+
+  // Pin Conversations
+  pinConversation: (id: string) => void;
+  unpinConversation: (id: string) => void;
 
   // Models
   selectedProvider: string;
@@ -1227,6 +1232,18 @@ export const useStore = create<AppState>((set, get) => ({
   moveToFolder: (conversationId, folderId) => set(s => ({
     conversations: s.conversations.map(c =>
       c.id === conversationId ? { ...c, folderId } : c
+    ),
+  })),
+
+  // Pin Conversations
+  pinConversation: (id) => set(s => ({
+    conversations: s.conversations.map(c =>
+      c.id === id ? { ...c, pinned: true } : c
+    ),
+  })),
+  unpinConversation: (id) => set(s => ({
+    conversations: s.conversations.map(c =>
+      c.id === id ? { ...c, pinned: false } : c
     ),
   })),
 
