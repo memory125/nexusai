@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
-  Users, Plus, Settings, Database, FileText, History, Shield,
-  MoreVertical, UserPlus, Trash2, LogOut, Crown, User, Eye,
-  Edit3, ChevronDown, X, Check, AlertTriangle, Clock
+  Users, Plus, Database, FileText, History, Shield,
+  UserPlus, Trash2, LogOut, Crown, User, Eye,
+  Edit3
 } from 'lucide-react';
 import {
   teamCollaborationService,
@@ -365,7 +365,7 @@ export function TeamCollaborationPage() {
                         <span className="text-xs px-2 py-1 rounded-full bg-white/5" style={{ color: 'var(--t-text-muted)' }}>
                           {getRoleLabel(member.role)}
                         </span>
-                        {myRole === 'owner' && member.userId !== this.currentUserId && (
+                        {myRole === 'owner' && member.role !== 'owner' && (
                           <button
                             onClick={() => handleRemoveMember(member.id)}
                             className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
