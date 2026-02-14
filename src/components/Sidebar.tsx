@@ -243,8 +243,8 @@ export function Sidebar() {
               </div>
             )}
 
-            {/* Pinned Conversations */}
-            {(() => {
+            {/* Pinned Conversations - Only show when not searching */}
+            {!searchQuery.trim() && (() => {
               const pinnedConvs = conversations.filter(c => c.pinned);
               if (pinnedConvs.length > 0) {
                 return (
@@ -287,12 +287,12 @@ export function Sidebar() {
               return null;
             })()}
 
-            {conversations.length === 0 && folders.length === 0 && (
+            {!searchQuery.trim() && conversations.length === 0 && folders.length === 0 && (
               <p className="px-3 py-4 text-xs text-center" style={{ color: 'var(--t-text-muted)' }}>暂无对话记录</p>
             )}
 
-            {/* Folders */}
-            {folders.map(folder => {
+            {/* Folders - Only show when not searching */}
+            {!searchQuery.trim() && folders.map(folder => {
               const folderConvs = getConversationsInFolder(folder.id);
               const isCollapsed = collapsedFolders.has(folder.id);
               
@@ -380,8 +380,8 @@ export function Sidebar() {
               );
             })}
 
-            {/* Uncategorized Conversations */}
-            {uncategorizedConvs.length > 0 && (
+            {/* Uncategorized Conversations - Only show when not searching */}
+            {!searchQuery.trim() && uncategorizedConvs.length > 0 && (
               <div className="mt-2">
                 <div className="mb-1 px-3 py-1 text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
                   未分类
