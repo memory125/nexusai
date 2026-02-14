@@ -68,17 +68,17 @@ function MainLayout() {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'chat': return <ChatPage />;
-      case 'agents': return <AgentsPage />;
-      case 'skills': return <SkillsPage />;
-      case 'knowledge': return <KnowledgeBasePage />;
-      case 'models': return <ModelsPage />;
-      case 'project': return <ProjectPage />;
-      case 'mcp': return <MCPPage />;
-      case 'plugins': return <PluginPage />;
-      case 'workflow': return <WorkflowPage />;
-      case 'settings': return <SettingsPage />;
-      default: return <ChatPage />;
+      case 'chat': return <ChatPage key={currentPage} />;
+      case 'agents': return <AgentsPage key={currentPage} />;
+      case 'skills': return <SkillsPage key={currentPage} />;
+      case 'knowledge': return <KnowledgeBasePage key={currentPage} />;
+      case 'models': return <ModelsPage key={currentPage} />;
+      case 'project': return <ProjectPage key={currentPage} />;
+      case 'mcp': return <MCPPage key={currentPage} />;
+      case 'plugins': return <PluginPage key={currentPage} />;
+      case 'workflow': return <WorkflowPage key={currentPage} />;
+      case 'settings': return <SettingsPage key={currentPage} />;
+      default: return <ChatPage key={currentPage} />;
     }
   };
 
