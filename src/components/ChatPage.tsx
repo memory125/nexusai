@@ -1,12 +1,226 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore, modelProviders } from '../store';
-import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, Image, File, X, Play, Pause, Volume2 } from 'lucide-react';
+import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, FileCode, Search, Star, Plus } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
 import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
 import { RAGService } from '../services/ragService';
 import { multimodalService } from '../services/multimodalService';
+import { conversationTemplateService, ConversationTemplate, TemplateCategory } from '../services/conversationTemplateService';
 import type { Attachment } from '../types/multimodal';
 import { formatFileSize } from '../types/multimodal';
+
+// Template Selector Modal Component
+function TemplateSelectorModal({ 
+  onSelect, 
+  onClose 
+}: { 
+  onSelect: (template: ConversationTemplate, variables?: Record<string, string>) => void;
+  onClose: () => void;
+}) {
+  const [templates, setTemplates] = useState<ConversationTemplate[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  
+  // New template form
+  const [newTemplate, setNewTemplate] = useState({
+    name: '',
+    description: '',
+    content: '',
+    category: 'general' as TemplateCategory,
+  });
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  const loadTemplates = () => {
+    let ts = conversationTemplateService.getAllTemplates();
+    if (searchQuery) {
+      ts = conversationTemplateService.searchTemplates(searchQuery);
+    }
+    if (selectedCategory !== 'all') {
+      ts = ts.filter(t => t.category === selectedCategory);
+    }
+    setTemplates(ts);
+  };
+
+  useEffect(() => {
+    loadTemplates();
+  }, [searchQuery, selectedCategory]);
+
+  const handleCreateTemplate = () => {
+    if (!newTemplate.name.trim() || !newTemplate.content.trim()) return;
+    
+    conversationTemplateService.createTemplate({
+      name: newTemplate.name,
+      description: newTemplate.description,
+      content: newTemplate.content,
+      category: newTemplate.category,
+    });
+    
+    setNewTemplate({ name: '', description: '', content: '', category: 'general' });
+    setShowCreateForm(false);
+    loadTemplates();
+  };
+
+  const categories: { value: TemplateCategory | 'all'; label: string; icon: string }[] = [
+    { value: 'all', label: '全部', icon: '📁' },
+    { value: 'general', label: '通用', icon: '💬' },
+    { value: 'coding', label: '编程', icon: '💻' },
+    { value: 'writing', label: '写作', icon: '✍️' },
+    { value: 'analysis', label: '分析', icon: '📊' },
+    { value: 'creative', label: '创意', icon: '🎨' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="glass-card rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold" style={{ color: 'var(--t-text)' }}>选择模板</h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowCreateForm(!showCreateForm)}
+              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              style={{ color: 'var(--t-text-muted)' }}
+              title="创建新模板"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              style={{ color: 'var(--t-text-muted)' }}
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--t-text-muted)' }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索模板..."
+            className="glass-input w-full rounded-xl py-2 pl-10 pr-4 text-sm"
+            style={{ color: 'var(--t-text)' }}
+          />
+        </div>
+
+        {/* Category Tabs */}
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+          {categories.map(cat => (
+            <button
+              key={cat.value}
+              onClick={() => setSelectedCategory(cat.value)}
+              className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors ${
+                selectedCategory === cat.value 
+                  ? 'bg-indigo-500/20 text-indigo-400' 
+                  : 'bg-white/5 hover:bg-white/10'
+              }`}
+              style={{ color: selectedCategory === cat.value ? undefined : 'var(--t-text-muted)' }}
+            >
+              {cat.icon} {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Create Form */}
+        {showCreateForm && (
+          <div className="mb-4 p-4 rounded-xl bg-white/5 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={newTemplate.name}
+                onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
+                placeholder="模板名称"
+                className="glass-input rounded-lg py-2 px-3 text-sm"
+                style={{ color: 'var(--t-text)' }}
+              />
+              <select
+                value={newTemplate.category}
+                onChange={(e) => setNewTemplate({ ...newTemplate, category: e.target.value as TemplateCategory })}
+                className="glass-input rounded-lg py-2 px-3 text-sm"
+                style={{ color: 'var(--t-text)' }}
+              >
+                <option value="general">通用</option>
+                <option value="coding">编程</option>
+                <option value="writing">写作</option>
+                <option value="analysis">分析</option>
+                <option value="creative">创意</option>
+                <option value="other">其他</option>
+              </select>
+            </div>
+            <input
+              type="text"
+              value={newTemplate.description}
+              onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
+              placeholder="模板描述（可选）"
+              className="glass-input w-full rounded-lg py-2 px-3 text-sm"
+              style={{ color: 'var(--t-text)' }}
+            />
+            <textarea
+              value={newTemplate.content}
+              onChange={(e) => setNewTemplate({ ...newTemplate, content: e.target.value })}
+              placeholder="模板内容...（使用 {{变量名}} 定义变量）"
+              className="glass-input w-full rounded-lg py-2 px-3 text-sm"
+              style={{ color: 'var(--t-text)', minHeight: 100 }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowCreateForm(false)}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+                style={{ color: 'var(--t-text)' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateTemplate}
+                disabled={!newTemplate.name.trim() || !newTemplate.content.trim()}
+                className="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 text-sm disabled:opacity-50"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Template List */}
+        <div className="flex-1 overflow-y-auto space-y-2">
+          {templates.length === 0 ? (
+            <p className="text-center py-8 text-sm" style={{ color: 'var(--t-text-muted)' }}>
+              暂无模板
+            </p>
+          ) : (
+            templates.map(template => (
+              <button
+                key={template.id}
+                onClick={() => onSelect(template)}
+                className="w-full p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+              >
+                <div className="flex items-start justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm" style={{ color: 'var(--t-text)' }}>{template.name}</span>
+                    {template.isFavorite && <Star className="h-3 w-3 text-yellow-400 fill-yellow-400" />}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5" style={{ color: 'var(--t-text-muted)' }}>
+                      {categories.find(c => c.value === template.category)?.label || template.category}
+                    </span>
+                  </div>
+                  <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>使用 {template.usageCount} 次</span>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{template.description}</p>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // RAG Sources Component - displays retrieved document chunks with performance stats
 function RAGSources({ 
@@ -205,7 +419,9 @@ export function ChatPage() {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -518,6 +734,15 @@ export function ChatPage() {
           )}
           
           <div className="flex items-end gap-2">
+            {/* Template Button */}
+            <button 
+              onClick={() => setShowTemplateSelector(true)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all mb-0.5 hover:text-white"
+              style={{ color: 'var(--t-text-muted)' }}
+              title="选择模板"
+            >
+              <FileCode className="h-4 w-4" />
+            </button>
             {/* File Upload Button */}
             <input
               type="file"
@@ -711,6 +936,84 @@ export function ChatPage() {
       </div>
 
       {renderInputBar()}
+
+      {/* Template Selector Modal */}
+      {showTemplateSelector && (
+        <TemplateSelectorModal 
+          onSelect={(template) => {
+            if (template.variables && template.variables.length > 0) {
+              // If template has variables, show variable input first
+              setSelectedTemplate(template);
+              setTemplateVariables({});
+              setShowTemplateSelector(false);
+            } else {
+              // No variables, apply directly
+              setInput(template.content);
+              conversationTemplateService.incrementUsage(template.id);
+              inputRef.current?.focus();
+              setShowTemplateSelector(false);
+            }
+          }}
+          onClose={() => setShowTemplateSelector(false)}
+        />
+      )}
+
+      {/* Template Variable Input Modal */}
+      {selectedTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="glass-card rounded-2xl p-6 max-w-lg w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--t-text)' }}>
+              填写模板变量
+            </h3>
+            <p className="text-sm mb-4" style={{ color: 'var(--t-text-muted)' }}>
+              {selectedTemplate.name}
+            </p>
+            
+            <div className="space-y-4">
+              {selectedTemplate.variables?.map((v: any) => (
+                <div key={v.name}>
+                  <label className="text-sm block mb-2" style={{ color: 'var(--t-text-secondary)' }}>
+                    {v.name}
+                    {v.defaultValue && <span className="text-xs ml-2 opacity-60">(默认值: {v.defaultValue})</span>}
+                  </label>
+                  <textarea
+                    value={templateVariables[v.name] || ''}
+                    onChange={(e) => setTemplateVariables({ ...templateVariables, [v.name]: e.target.value })}
+                    placeholder={v.placeholder}
+                    className="glass-input w-full rounded-xl py-2 px-3 text-sm"
+                    style={{ color: 'var(--t-text)', minHeight: 80 }}
+                  />
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setSelectedTemplate(null);
+                  setTemplateVariables({});
+                }}
+                className="flex-1 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
+                style={{ color: 'var(--t-text)' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  const content = conversationTemplateService.renderTemplate(selectedTemplate.id, templateVariables);
+                  setInput(content);
+                  setSelectedTemplate(null);
+                  setTemplateVariables({});
+                  inputRef.current?.focus();
+                }}
+                className="flex-1 px-4 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 text-sm transition-colors"
+              >
+                应用模板
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
