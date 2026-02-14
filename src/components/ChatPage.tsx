@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore, modelProviders } from '../store';
-import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, FileCode, Search, Star, Plus, ThumbsUp, ThumbsDown, Download, Copy, FileJson, File } from 'lucide-react';
+import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, Volume1, FileCode, Search, Star, Plus, ThumbsUp, ThumbsDown, Download, Copy, FileJson, File } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
 import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
 import { RAGService } from '../services/ragService';
@@ -8,6 +8,7 @@ import { multimodalService } from '../services/multimodalService';
 import { conversationTemplateService, ConversationTemplate, TemplateCategory } from '../services/conversationTemplateService';
 import { messageRatingService, Rating } from '../services/messageRatingService';
 import { conversationExportService } from '../services/conversationExportService';
+import { ttsService } from '../services/ttsService';
 import type { Attachment } from '../types/multimodal';
 import { formatFileSize } from '../types/multimodal';
 
@@ -510,6 +511,22 @@ export function ChatPage() {
 
   // Handle message rating
   const [messageRatings, setMessageRatings] = useState<Record<string, Rating>>({});
+  const [playingTTS, setPlayingTTS] = useState<string | null>(null);
+  
+  const handlePlayTTS = async (msgId: string, content: string) => {
+    if (playingTTS === msgId) {
+      ttsService.stop();
+      setPlayingTTS(null);
+    } else {
+      setPlayingTTS(msgId);
+      try {
+        await ttsService.speak(content);
+      } catch (e) {
+        console.error('TTS error:', e);
+      }
+      setPlayingTTS(null);
+    }
+  };
   
   const handleRateMessage = (msgId: string, rating: Rating) => {
     // Toggle rating: if same rating, remove it
@@ -987,6 +1004,17 @@ export function ChatPage() {
                       title="踩"
                     >
                       <ThumbsDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handlePlayTTS(msg.id, msg.content)}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        playingTTS === msg.id 
+                          ? 'text-indigo-400 bg-indigo-500/20' 
+                          : 'text-gray-400 hover:text-indigo-400 hover:bg-indigo-500/10'
+                      }`}
+                      title={playingTTS === msg.id ? '停止语音' : '语音播放'}
+                    >
+                      {playingTTS === msg.id ? <Volume1 className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
                     </button>
                   </div>
                 )}

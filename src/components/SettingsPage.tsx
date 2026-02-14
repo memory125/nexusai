@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useStore, modelProviders, themeConfigs } from '../store';
 import type { ThemeId } from '../store';
-import { Settings, User, Key, Palette, Bell, Shield, LogOut, Check, Monitor, Sun, Moon, Sparkles, X, Eye, Zap } from 'lucide-react';
+import { Settings, User, Key, Palette, Bell, Shield, LogOut, Check, Monitor, Sun, Moon, Sparkles, X, Eye, Zap, Keyboard, RotateCcw } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
+import { keyboardShortcutsService, ShortcutCategory } from '../services/keyboardShortcutsService';
+import { ttsService } from '../services/ttsService';
 
 function ThemeCard({ themeId, name, description, preview, isActive, onClick }: {
   themeId: ThemeId;
@@ -480,7 +482,83 @@ export function SettingsPage() {
                     </button>
                   </div>
                 );
-              })}
+              }              )}
+            </div>
+          </div>
+
+          {/* Keyboard Shortcuts */}
+          <div className="glass-card rounded-2xl p-6 animate-fade-in" style={{ animationDelay: '225ms' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Keyboard className="h-4 w-4 text-cyan-400" />
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--t-text)' }}>快捷键</h3>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm('确定要恢复默认快捷键吗？')) {
+                    keyboardShortcutsService.resetToDefaults();
+                  }
+                }}
+                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                style={{ color: 'var(--t-text-muted)' }}
+                title="恢复默认"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            
+            {/* TTS Test */}
+            <div className="mb-4 p-3 rounded-xl bg-white/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium" style={{ color: 'var(--t-text)' }}>语音输出 (TTS)</p>
+                  <p className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+                    {ttsService.isSupported() ? '已支持' : '不支持'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => ttsService.test()}
+                  disabled={!ttsService.isSupported()}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-xs disabled:opacity-50"
+                  style={{ color: 'var(--t-text)' }}
+                >
+                  测试语音
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {keyboardShortcutsService.getByCategory().map((category: ShortcutCategory) => (
+                <div key={category.id}>
+                  <div className="text-[10px] font-medium uppercase tracking-wider mb-2" style={{ color: 'var(--t-text-muted)' }}>
+                    {category.name}
+                  </div>
+                  <div className="space-y-2">
+                    {category.shortcuts.map(shortcut => (
+                      <div
+                        key={shortcut.id}
+                        className="flex items-center justify-between rounded-lg p-2"
+                        style={{ background: 'var(--t-glass-card)' }}
+                      >
+                        <span className="text-xs" style={{ color: 'var(--t-text)' }}>
+                          {shortcut.description}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <kbd className="px-2 py-1 rounded text-[10px] font-mono" style={{ background: 'var(--t-glass-border)', color: 'var(--t-text-muted)' }}>
+                            {keyboardShortcutsService.getShortcutDisplay(shortcut.keys)}
+                          </kbd>
+                          <button
+                            onClick={() => keyboardShortcutsService.toggleShortcut(shortcut.id)}
+                            className={`w-8 h-4 rounded-full transition-colors ${shortcut.enabled ? 'bg-green-500' : 'bg-gray-600'}`}
+                          >
+                            <div className={`w-3 h-3 rounded-full bg-white transition-transform ${shortcut.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
