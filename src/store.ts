@@ -86,7 +86,7 @@ export interface ModelOption {
   supportsVision?: boolean;
 }
 
-export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'knowledge' | 'mcp' | 'plugins' | 'settings' | 'workflow';
+export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'knowledge' | 'mcp' | 'plugins' | 'settings' | 'workflow' | 'search';
 
 export type ThemeId = 'midnight' | 'aurora' | 'sunset' | 'ocean' | 'forest' | 'rose' | 'cyberpunk' | 'light' | 'light-lavender' | 'light-peach' | 'light-mint' | 'light-sky' | 'light-sand';
 
@@ -837,6 +837,7 @@ const defaultAgents: Agent[] = [
 const defaultSkills: Skill[] = [
   // 信息获取
   { id: 'web-search', name: '网络搜索', description: '实时搜索互联网获取最新信息', icon: '🔍', category: '信息获取', enabled: true },
+  { id: 'intelligent-search', name: '智能搜索增强', description: '多引擎聚合搜索、智能融合、结果摘要', icon: '🌐', category: '信息获取', enabled: true },
   { id: 'research', name: '深度研究', description: '多轮深度调研和报告生成', icon: '🔎', category: '信息获取', enabled: true },
   { id: 'file-reading', name: '文件解析', description: '解析和提取PDF、Word、Excel等文档内容', icon: '📄', category: '信息获取', enabled: true },
   { id: 'knowledge-mining', name: '知识挖掘', description: '从文本中提取实体、关系和知识图谱', icon: '⛏️', category: '信息获取', enabled: false },

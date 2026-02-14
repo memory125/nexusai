@@ -12,6 +12,7 @@ import { KnowledgeBasePage } from './components/KnowledgeBasePage';
 import { MCPPage } from './components/MCPPage';
 import { PluginPage } from './components/PluginPage';
 import { WorkflowPage } from './components/WorkflowPage';
+import { IntelligentSearchPage } from './components/IntelligentSearchPage';
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { theme } = useStore();
@@ -77,6 +78,7 @@ function MainLayout() {
       case 'mcp': return <MCPPage key={currentPage} />;
       case 'plugins': return <PluginPage key={currentPage} />;
       case 'workflow': return <WorkflowPage key={currentPage} />;
+      case 'search': return <IntelligentSearchPage key={currentPage} />;
       case 'settings': return <SettingsPage key={currentPage} />;
       default: return <ChatPage key={currentPage} />;
     }
