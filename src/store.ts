@@ -86,7 +86,7 @@ export interface ModelOption {
   supportsVision?: boolean;
 }
 
-export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'knowledge' | 'mcp' | 'plugins' | 'settings' | 'workflow' | 'search';
+export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'knowledge' | 'mcp' | 'plugins' | 'settings' | 'workflow' | 'search' | 'data-management';
 
 export type ThemeId = 'midnight' | 'aurora' | 'sunset' | 'ocean' | 'forest' | 'rose' | 'cyberpunk' | 'light' | 'light-lavender' | 'light-peach' | 'light-mint' | 'light-sky' | 'light-sand';
 
@@ -842,6 +842,9 @@ const defaultSkills: Skill[] = [
   { id: 'file-reading', name: '文件解析', description: '解析和提取PDF、Word、Excel等文档内容', icon: '📄', category: '信息获取', enabled: true },
   { id: 'knowledge-mining', name: '知识挖掘', description: '从文本中提取实体、关系和知识图谱', icon: '⛏️', category: '信息获取', enabled: false },
   { id: 'fact-checking', name: '事实核查', description: '验证信息真实性，交叉引用多个来源', icon: '✅', category: '信息获取', enabled: false },
+  { id: 'conversation-export', name: '对话导出', description: '导出对话为Markdown/PDF/JSON格式', icon: '📤', category: '信息获取', enabled: true },
+  { id: 'voice-interaction', name: '语音交互', description: '语音输入、语音播报、语音命令', icon: '🎙️', category: '信息获取', enabled: true },
+  { id: 'data-management', name: '数据管理', description: '数据备份、恢复、清理和存储统计', icon: '💾', category: '信息获取', enabled: true },
   
   // 开发工具
   { id: 'coding', name: '代码生成', description: '生成、调试和优化各种编程语言代码', icon: '⌨️', category: '开发工具', enabled: true },

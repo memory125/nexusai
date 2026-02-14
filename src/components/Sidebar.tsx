@@ -1,7 +1,7 @@
 import { useStore } from '../store';
 import {
   MessageSquare, Bot, Zap, Cpu, Settings, Plus, Trash2,
-  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, FolderGit2, Database, Plug, Puzzle, Workflow, Globe
+  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive
 } from 'lucide-react';
 import type { Page } from '../store';
 
@@ -16,6 +16,7 @@ const navItems: { id: Page; label: string; icon: React.ReactNode }[] = [
   { id: 'mcp', label: 'MCP', icon: <Plug className="h-4.5 w-4.5" /> },
   { id: 'plugins', label: '插件', icon: <Puzzle className="h-4.5 w-4.5" /> },
   { id: 'workflow', label: '工作流', icon: <Workflow className="h-4.5 w-4.5" /> },
+  { id: 'data-management', label: '数据管理', icon: <HardDrive className="h-4.5 w-4.5" /> },
   { id: 'settings', label: '设置', icon: <Settings className="h-4.5 w-4.5" /> },
 ];
 
