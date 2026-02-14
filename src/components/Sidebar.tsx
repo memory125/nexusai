@@ -1,7 +1,7 @@
 import { useStore } from '../store';
 import {
   MessageSquare, Bot, Zap, Cpu, Settings, Plus, Trash2,
-  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive
+  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive, Globe2, Users
 } from 'lucide-react';
 import type { Page } from '../store';
 
@@ -11,11 +11,13 @@ const navItems: { id: Page; label: string; icon: React.ReactNode }[] = [
   { id: 'skills', label: 'Skills', icon: <Zap className="h-4.5 w-4.5" /> },
   { id: 'search', label: '智能搜索', icon: <Globe className="h-4.5 w-4.5" /> },
   { id: 'knowledge', label: '知识库', icon: <Database className="h-4.5 w-4.5" /> },
+  { id: 'browser', label: '浏览器自动化', icon: <Globe2 className="h-4.5 w-4.5" /> },
   { id: 'models', label: '模型', icon: <Cpu className="h-4.5 w-4.5" /> },
   { id: 'project', label: '项目', icon: <FolderGit2 className="h-4.5 w-4.5" /> },
   { id: 'mcp', label: 'MCP', icon: <Plug className="h-4.5 w-4.5" /> },
   { id: 'plugins', label: '插件', icon: <Puzzle className="h-4.5 w-4.5" /> },
   { id: 'workflow', label: '工作流', icon: <Workflow className="h-4.5 w-4.5" /> },
+  { id: 'team', label: '团队协作', icon: <Users className="h-4.5 w-4.5" /> },
   { id: 'data-management', label: '数据管理', icon: <HardDrive className="h-4.5 w-4.5" /> },
   { id: 'settings', label: '设置', icon: <Settings className="h-4.5 w-4.5" /> },
 ];

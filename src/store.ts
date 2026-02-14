@@ -86,7 +86,7 @@ export interface ModelOption {
   supportsVision?: boolean;
 }
 
-export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'knowledge' | 'mcp' | 'plugins' | 'settings' | 'workflow' | 'search' | 'data-management';
+export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'knowledge' | 'mcp' | 'plugins' | 'settings' | 'workflow' | 'search' | 'data-management' | 'browser' | 'team';
 
 export type ThemeId = 'midnight' | 'aurora' | 'sunset' | 'ocean' | 'forest' | 'rose' | 'cyberpunk' | 'light' | 'light-lavender' | 'light-peach' | 'light-mint' | 'light-sky' | 'light-sand';
 
@@ -845,6 +845,8 @@ const defaultSkills: Skill[] = [
   { id: 'conversation-export', name: '对话导出', description: '导出对话为Markdown/PDF/JSON格式', icon: '📤', category: '信息获取', enabled: true },
   { id: 'voice-interaction', name: '语音交互', description: '语音输入、语音播报、语音命令', icon: '🎙️', category: '信息获取', enabled: true },
   { id: 'data-management', name: '数据管理', description: '数据备份、恢复、清理和存储统计', icon: '💾', category: '信息获取', enabled: true },
+  { id: 'browser-automation', name: '浏览器自动化', description: '网页搜索总结、截图、数据抓取、表单填写', icon: '🌐', category: '信息获取', enabled: true },
+  { id: 'team-collaboration', name: '团队协作', description: '共享知识库、权限管理、审计日志、团队模板', icon: '👥', category: '信息获取', enabled: true },
   
   // 开发工具
   { id: 'coding', name: '代码生成', description: '生成、调试和优化各种编程语言代码', icon: '⌨️', category: '开发工具', enabled: true },
