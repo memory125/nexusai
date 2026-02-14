@@ -83,6 +83,7 @@ export interface ModelOption {
   description: string;
   contextWindow: string;
   pricing: string;
+  supportsVision?: boolean;
 }
 
 export type Page = 'chat' | 'agents' | 'skills' | 'models' | 'project' | 'knowledge' | 'mcp' | 'plugins' | 'settings' | 'workflow';
@@ -923,8 +924,6 @@ const defaultSkills: Skill[] = [
   { id: 'influencer', name: '网红合作', description: 'KOL筛选、合作谈判和效果追踪', icon: '⭐', category: '媒体工具', enabled: false },
   { id: 'video-production', name: '视频制作', description: '脚本、拍摄、剪辑和特效', icon: '🎥', category: '媒体工具', enabled: false },
   { id: 'podcast', name: '播客制作', description: '节目策划、录制和后期制作', icon: '🎙️', category: '媒体工具', enabled: false },
-  { id: 'copywriting', name: '广告文案', description: '吸引眼球的广告文案和营销内容', icon: '📣', category: '媒体工具', enabled: false },
-  { id: 'storytelling', name: '故事叙述', description: '品牌故事和情感营销', icon: '📖', category: '媒体工具', enabled: false },
   
   // 教育培训
   { id: 'instructional-design', name: '教学设计', description: '课程设计、学习目标和学习路径', icon: '🎓', category: '教育工具', enabled: false },
@@ -975,8 +974,6 @@ const defaultSkills: Skill[] = [
   { id: 'wellness', name: '健康管理', description: '整体健康和生活方式', icon: '🧘', category: '健康工具', enabled: false },
   { id: 'meditation', name: '冥想指导', description: '冥想练习和内心平静', icon: '🧘‍♀️', category: '健康工具', enabled: false },
   { id: 'stress-management', name: '压力管理', description: '压力缓解和情绪调节', icon: '😌', category: '健康工具', enabled: false },
-  { id: 'fitness', name: '健身指导', description: '训练计划和运动技巧', icon: '🏋️', category: '健康工具', enabled: false },
-  { id: 'nutrition', name: '营养学', description: '膳食搭配和健康饮食', icon: '🥗', category: '健康工具', enabled: false },
   { id: 'sleep', name: '睡眠改善', description: '睡眠质量和健康作息', icon: '😴', category: '健康工具', enabled: false },
   { id: 'mental-health', name: '心理健康', description: '心理辅导和情绪支持', icon: '❤️', category: '健康工具', enabled: false },
   
@@ -1014,7 +1011,7 @@ const defaultSkills: Skill[] = [
   // 生活与个人发展
   { id: 'personal-development', name: '个人成长', description: '自我提升和习惯养成', icon: '🌟', category: '生活工具', enabled: false },
   { id: 'time-management', name: '时间管理', description: '日程规划和效率提升', icon: '⏰', category: '生活工具', enabled: false },
-  { id: 'productivity', name: '效率提升', description: 'GTD等效率方法论', icon: '⚡', category: '生活工具', enabled: false },
+
   { id: 'habit-formation', name: '习惯养成', description: '习惯追踪和行为改变', icon: '🔄', category: '生活工具', enabled: false },
   { id: 'goal-setting', name: '目标设定', description: 'OKR和目标管理', icon: '🎯', category: '生活工具', enabled: false },
   { id: 'mindfulness', name: '正念', description: '当下觉察和内心平静', icon: '🧘', category: '生活工具', enabled: false },
@@ -1227,14 +1224,14 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#10a37f',
     models: [
-      { id: 'gpt-4.1', name: 'GPT-4.1', description: '最新旗舰模型，全面超越GPT-4o', contextWindow: '1M', pricing: '$2/M tokens' },
-      { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', description: '高性价比，适合大规模使用', contextWindow: '1M', pricing: '$0.4/M tokens' },
-      { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', description: '极致轻量，超快响应', contextWindow: '1M', pricing: '$0.1/M tokens' },
+      { id: 'gpt-4.1', name: 'GPT-4.1', description: '最新旗舰模型，全面超越GPT-4o', contextWindow: '1M', pricing: '$2/M tokens', supportsVision: true },
+      { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', description: '高性价比，适合大规模使用', contextWindow: '1M', pricing: '$0.4/M tokens', supportsVision: true },
+      { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', description: '极致轻量，超快响应', contextWindow: '1M', pricing: '$0.1/M tokens', supportsVision: true },
       { id: 'o3', name: 'o3', description: '最强推理模型，超越人类专家', contextWindow: '200K', pricing: '$10/M tokens' },
       { id: 'o3-mini', name: 'o3-mini', description: '轻量推理，高性价比', contextWindow: '200K', pricing: '$1.1/M tokens' },
       { id: 'o4-mini', name: 'o4-mini', description: '最新一代推理模型', contextWindow: '200K', pricing: '$1.1/M tokens' },
-      { id: 'gpt-4o', name: 'GPT-4o', description: '多模态旗舰，视觉+语音+文本', contextWindow: '128K', pricing: '$2.5/M tokens' },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: '多模态高性价比选择', contextWindow: '128K', pricing: '$0.15/M tokens' },
+      { id: 'gpt-4o', name: 'GPT-4o', description: '多模态旗舰，视觉+语音+文本', contextWindow: '128K', pricing: '$2.5/M tokens', supportsVision: true },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: '多模态高性价比选择', contextWindow: '128K', pricing: '$0.15/M tokens', supportsVision: true },
     ],
   },
   {
@@ -1243,13 +1240,13 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#D97757',
     models: [
-      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', description: '最新旗舰，混合推理模型，1M上下文', contextWindow: '1M', pricing: '$5/M input, $25/M output' },
-      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', description: '顶级编程与Agent能力', contextWindow: '200K', pricing: '$5/M input, $25/M output' },
-      { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', description: '平衡性能与成本的最新选择', contextWindow: '200K', pricing: '$3/M input, $15/M output' },
-      { id: 'claude-4-opus', name: 'Claude 4 Opus', description: '最强旗舰，深度推理与创作', contextWindow: '200K', pricing: '$15/M tokens' },
-      { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet', description: '平衡性能与成本的首选', contextWindow: '200K', pricing: '$3/M tokens' },
-      { id: 'claude-3.5-haiku', name: 'Claude 3.5 Haiku', description: '极速响应，适合实时场景', contextWindow: '200K', pricing: '$0.25/M tokens' },
-      { id: 'claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', description: '经典版本，稳定可靠', contextWindow: '200K', pricing: '$3/M tokens' },
+      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', description: '最新旗舰，混合推理模型，1M上下文', contextWindow: '1M', pricing: '$5/M input, $25/M output', supportsVision: true },
+      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', description: '顶级编程与Agent能力', contextWindow: '200K', pricing: '$5/M input, $25/M output', supportsVision: true },
+      { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', description: '平衡性能与成本的最新选择', contextWindow: '200K', pricing: '$3/M input, $15/M output', supportsVision: true },
+      { id: 'claude-4-opus', name: 'Claude 4 Opus', description: '最强旗舰，深度推理与创作', contextWindow: '200K', pricing: '$15/M tokens', supportsVision: true },
+      { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet', description: '平衡性能与成本的首选', contextWindow: '200K', pricing: '$3/M tokens', supportsVision: true },
+      { id: 'claude-3.5-haiku', name: 'Claude 3.5 Haiku', description: '极速响应，适合实时场景', contextWindow: '200K', pricing: '$0.25/M tokens', supportsVision: true },
+      { id: 'claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', description: '经典版本，稳定可靠', contextWindow: '200K', pricing: '$3/M tokens', supportsVision: true },
     ],
   },
   {
@@ -1258,13 +1255,13 @@ export const modelProviders: ModelProvider[] = [
     logo: '',
     color: '#4285f4',
     models: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: '思考型旗舰，原生多模态，GA稳定版', contextWindow: '1M', pricing: '$1.25/M input, $10/M output' },
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: '极速思考，性价比之王', contextWindow: '1M', pricing: '$0.15/M input, $0.60/M output' },
-      { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', description: '超轻量版，最快响应', contextWindow: '1M', pricing: '$0.10/M tokens' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: '下一代快速推理', contextWindow: '1M', pricing: '$0.10/M tokens' },
-      { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro', description: '2.0系列专业版', contextWindow: '2M', pricing: '$1.25/M tokens' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: '百万上下文，长文档处理', contextWindow: '2M', pricing: '$1.25/M tokens' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: '长上下文快速版', contextWindow: '1M', pricing: '$0.075/M tokens' },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: '思考型旗舰，原生多模态，GA稳定版', contextWindow: '1M', pricing: '$1.25/M input, $10/M output', supportsVision: true },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: '极速思考，性价比之王', contextWindow: '1M', pricing: '$0.15/M input, $0.60/M output', supportsVision: true },
+      { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', description: '超轻量版，最快响应', contextWindow: '1M', pricing: '$0.10/M tokens', supportsVision: true },
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: '下一代快速推理', contextWindow: '1M', pricing: '$0.10/M tokens', supportsVision: true },
+      { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro', description: '2.0系列专业版', contextWindow: '2M', pricing: '$1.25/M tokens', supportsVision: true },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: '百万上下文，长文档处理', contextWindow: '2M', pricing: '$1.25/M tokens', supportsVision: true },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: '长上下文快速版', contextWindow: '1M', pricing: '$0.075/M tokens', supportsVision: true },
     ],
   },
   {
@@ -1295,7 +1292,7 @@ export const modelProviders: ModelProvider[] = [
       { id: 'glm-4-long', name: 'GLM-4-Long', description: '超长上下文，百万tokens', contextWindow: '1M', pricing: '¥0.01/千tokens' },
       { id: 'glm-4-airx', name: 'GLM-4-AirX', description: '极速推理，低延迟', contextWindow: '128K', pricing: '¥0.01/千tokens' },
       { id: 'glm-4-flash', name: 'GLM-4-Flash', description: '免费版本，日常使用', contextWindow: '128K', pricing: '免费' },
-      { id: 'glm-4v-plus', name: 'GLM-4V-Plus', description: '视觉理解，多模态', contextWindow: '8K', pricing: '¥0.05/千tokens' },
+      { id: 'glm-4v-plus', name: 'GLM-4V-Plus', description: '视觉理解，多模态', contextWindow: '8K', pricing: '¥0.05/千tokens', supportsVision: true },
     ],
   },
   {

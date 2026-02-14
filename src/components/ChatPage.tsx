@@ -270,6 +270,18 @@ export function ChatPage() {
   // Update handleSend to include attachments
   const handleSend = async () => {
     if ((!input.trim() && attachments.length === 0) || isGenerating) return;
+    
+    // Check if any attachment is an image and if current model supports vision
+    const hasImageAttachment = attachments.some(att => att.type === 'image');
+    if (hasImageAttachment) {
+      const currentProvider = modelProviders.find(p => p.id === selectedProvider);
+      const currentModel = currentProvider?.models.find(m => m.id === selectedModel);
+      if (!currentModel?.supportsVision) {
+        alert(`当前模型 ${currentModel?.name || selectedModel} 不支持图片输入。\n\n请切换到以下支持视觉的模型：\n• OpenAI: GPT-4o, GPT-4o Mini, GPT-4.1 系列\n• Anthropic: Claude 3.5/4 系列\n• Google: Gemini 系列\n• 智谱: GLM-4V-Plus`);
+        return;
+      }
+    }
+    
     let convId = activeConversationId;
     if (!convId) {
       convId = createConversation(activeAgent?.id);
