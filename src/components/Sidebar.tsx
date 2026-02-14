@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useStore } from '../store';
 import {
   MessageSquare, Bot, Zap, Cpu, Settings, Plus, Trash2,
-  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, ChevronDown, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive, Globe2, Users, Folder, MoreVertical, Edit2, FolderPlus, Pin
+  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, ChevronDown, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive, Globe2, Users, Folder, MoreVertical, Edit2, FolderPlus, Pin, Search, X
 } from 'lucide-react';
+import { conversationSearchService } from '../services/conversationSearchService';
 import type { Page } from '../store';
 
 const navItems: { id: Page; label: string; icon: React.ReactNode }[] = [
@@ -28,6 +29,9 @@ export function Sidebar() {
   const [showFolderMenu, setShowFolderMenu] = useState<string | null>(null);
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ReturnType<typeof conversationSearchService.search>>([]);
+  const [isSearching, setIsSearching] = useState(false);
   
   const {
     sidebarOpen, toggleSidebar, currentPage, setCurrentPage,
@@ -54,6 +58,24 @@ export function Sidebar() {
       createFolder(newFolderName.trim());
       setNewFolderName('');
     }
+  };
+
+  // Search handlers
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (query.trim()) {
+      setIsSearching(true);
+      const results = conversationSearchService.search(query);
+      setSearchResults(results);
+      setIsSearching(false);
+    } else {
+      setSearchResults([]);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
   };
 
   const getConversationsInFolder = (folderId: string) => {
@@ -126,6 +148,65 @@ export function Sidebar() {
         {/* Conversations List with Folders */}
         {sidebarOpen && currentPage === 'chat' && (
           <div className="flex-1 overflow-y-auto px-2 py-2 mt-2" style={{ borderTop: '1px solid var(--t-glass-border)' }}>
+            {/* Search Input */}
+            <div className="mb-2 px-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--t-text-muted)' }} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => handleSearch(e.target.value)}
+                  placeholder="搜索对话..."
+                  className="w-full pl-9 pr-8 py-2 rounded-lg text-xs outline-none bg-white/5 border border-transparent focus:border-indigo-500/50 transition-colors"
+                  style={{ color: 'var(--t-text)' }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/10"
+                  >
+                    <X className="h-3.5 w-3.5" style={{ color: 'var(--t-text-muted)' }} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Search Results */}
+            {searchQuery.trim() && (
+              <div className="mb-2">
+                <div className="mb-1 px-3 py-1 text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                  搜索结果 ({searchResults.length})
+                </div>
+                {searchResults.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-center" style={{ color: 'var(--t-text-muted)' }}>未找到相关对话</p>
+                ) : (
+                  searchResults.map(result => (
+                    <div
+                      key={`${result.conversation.id}-${result.messageIndex}`}
+                      onClick={() => setActiveConversation(result.conversation.id)}
+                      className="group flex flex-col gap-1 rounded-lg px-3 py-2 text-xs cursor-pointer mb-0.5 transition-all"
+                      style={{
+                        background: activeConversationId === result.conversation.id ? 'var(--t-sidebar-active)' : 'transparent',
+                        color: activeConversationId === result.conversation.id ? 'var(--t-text)' : 'var(--t-text-secondary)',
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                        <span className="flex-1 truncate font-medium">{result.conversation.title}</span>
+                      </div>
+                      <div className="pl-5 text-[10px] truncate" style={{ color: 'var(--t-text-muted)' }}>
+                        {result.matchedIn === 'title' ? (
+                          <span className="text-indigo-400">标题匹配</span>
+                        ) : (
+                          <>消息: {result.matchedContent}</>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
             {/* Folder Header with Create */}
             <div className="mb-2 flex items-center justify-between px-3">
               <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
