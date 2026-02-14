@@ -36,6 +36,8 @@ export interface Message {
   model?: string;
   ragSources?: RAGSource[];
   ragStats?: RAGPerformanceStats;
+  rating?: 'up' | 'down' | null;
+  ratingTimestamp?: number;
 }
 
 export interface Conversation {

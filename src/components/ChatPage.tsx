@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore, modelProviders } from '../store';
-import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, FileCode, Search, Star, Plus } from 'lucide-react';
+import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, FileCode, Search, Star, Plus, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
 import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
 import { RAGService } from '../services/ragService';
 import { multimodalService } from '../services/multimodalService';
 import { conversationTemplateService, ConversationTemplate, TemplateCategory } from '../services/conversationTemplateService';
+import { messageRatingService, Rating } from '../services/messageRatingService';
 import type { Attachment } from '../types/multimodal';
 import { formatFileSize } from '../types/multimodal';
 
@@ -483,6 +484,32 @@ export function ChatPage() {
     }
   };
 
+  // Handle message rating
+  const [messageRatings, setMessageRatings] = useState<Record<string, Rating>>({});
+  
+  const handleRateMessage = (msgId: string, rating: Rating) => {
+    // Toggle rating: if same rating, remove it
+    if (messageRatings[msgId] === rating) {
+      const newRatings = { ...messageRatings };
+      delete newRatings[msgId];
+      setMessageRatings(newRatings);
+    } else {
+      setMessageRatings({ ...messageRatings, [msgId]: rating });
+    }
+    
+    // Also save to service
+    if (activeConv) {
+      messageRatingService.rateMessage(
+        msgId,
+        activeConv.id,
+        rating,
+        activeConv.messages.find(m => m.id === msgId)?.content || '',
+        activeConv.model,
+        activeConv.provider
+      );
+    }
+  };
+
   // Update handleSend to include attachments
   const handleSend = async () => {
     if ((!input.trim() && attachments.length === 0) || isGenerating) return;
@@ -903,6 +930,33 @@ export function ChatPage() {
                 )}
                 {msg.model && msg.role === 'assistant' && (
                   <p className="mt-2 text-[10px] pt-1.5" style={{ borderTop: '1px solid var(--t-glass-border)', color: 'var(--t-text-muted)' }}>{msg.model}</p>
+                )}
+                {/* Rating buttons for assistant messages */}
+                {msg.role === 'assistant' && (
+                  <div className="flex items-center gap-1 mt-2 pt-2" style={{ borderTop: '1px solid var(--t-glass-border)' }}>
+                    <button
+                      onClick={() => handleRateMessage(msg.id, 'up')}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        messageRatings[msg.id] === 'up' 
+                          ? 'text-green-400 bg-green-500/20' 
+                          : 'text-gray-400 hover:text-green-400 hover:bg-green-500/10'
+                      }`}
+                      title="赞"
+                    >
+                      <ThumbsUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleRateMessage(msg.id, 'down')}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        messageRatings[msg.id] === 'down' 
+                          ? 'text-red-400 bg-red-500/20' 
+                          : 'text-gray-400 hover:text-red-400 hover:bg-red-500/10'
+                      }`}
+                      title="踩"
+                    >
+                      <ThumbsDown className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 )}
               </div>
               {msg.role === 'user' && (
