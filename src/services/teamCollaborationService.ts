@@ -62,6 +62,7 @@ export interface SharedPromptTemplate {
   category: string;
   tags: string[];
   createdBy: string;
+  permissions: Record<string, 'read' | 'write' | 'admin'>; // userId -> permission
   createdAt: number;
   updatedAt: number;
   useCount: number;
@@ -412,6 +413,142 @@ export class TeamCollaborationService {
   }
 
   /**
+   * Check if user can access knowledge base (read)
+   */
+  canAccessKnowledgeBase(kbId: string, userId?: string): boolean {
+    const uid = userId || this.currentUserId;
+    const kb = this.sharedKnowledgeBases.get(kbId);
+    if (!kb) return false;
+
+    // Owner can always access
+    if (kb.ownerId === uid) return true;
+
+    // Check explicit permission
+    if (kb.permissions[uid]) return true;
+
+    // Team members with team-level admin/editor role can access
+    const team = this.teams.get(kb.teamId);
+    if (team) {
+      const member = team.members.find(m => m.userId === uid);
+      if (member && (member.role === 'owner' || member.role === 'admin' || member.role === 'editor')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if user can edit knowledge base
+   */
+  canEditKnowledgeBase(kbId: string, userId?: string): boolean {
+    const uid = userId || this.currentUserId;
+    const kb = this.sharedKnowledgeBases.get(kbId);
+    if (!kb) return false;
+
+    // Owner can always edit
+    if (kb.ownerId === uid) return true;
+
+    // Check explicit permission
+    if (kb.permissions[uid] === 'admin' || kb.permissions[uid] === 'write') return true;
+
+    // Team owners/admins can edit
+    const team = this.teams.get(kb.teamId);
+    if (team) {
+      const member = team.members.find(m => m.userId === uid);
+      if (member && (member.role === 'owner' || member.role === 'admin')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get user's permission level for a knowledge base
+   */
+  getKnowledgeBasePermission(kbId: string, userId?: string): 'owner' | 'admin' | 'write' | 'read' | null {
+    const uid = userId || this.currentUserId;
+    const kb = this.sharedKnowledgeBases.get(kbId);
+    if (!kb) return null;
+
+    if (kb.ownerId === uid) return 'owner';
+    if (kb.permissions[uid] === 'admin') return 'admin';
+    if (kb.permissions[uid] === 'write') return 'write';
+    if (kb.permissions[uid] === 'read') return 'read';
+
+    // Check team role
+    const team = this.teams.get(kb.teamId);
+    if (team) {
+      const member = team.members.find(m => m.userId === uid);
+      if (member) {
+        if (member.role === 'owner') return 'owner';
+        if (member.role === 'admin') return 'admin';
+        if (member.role === 'editor') return 'write';
+        if (member.role === 'viewer') return 'read';
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Remove knowledge base permission
+   */
+  async removeKnowledgeBasePermission(kbId: string, userId: string): Promise<boolean> {
+    const kb = this.sharedKnowledgeBases.get(kbId);
+    if (!kb) return false;
+
+    // Check if current user has admin permission
+    if (!this.canEditKnowledgeBase(kbId)) {
+      throw new Error('无权修改权限');
+    }
+
+    delete kb.permissions[userId];
+    kb.lastUpdatedAt = Date.now();
+
+    this.logAudit({
+      teamId: kb.teamId,
+      action: 'permission_change',
+      resourceType: 'knowledge_base',
+      resourceId: kbId,
+      resourceName: kb.name,
+      details: { userId, action: 'remove' },
+    });
+
+    this.saveToStorage();
+    return true;
+  }
+
+  /**
+   * Remove prompt permission
+   */
+  async removePromptPermission(promptId: string, userId: string): Promise<boolean> {
+    const prompt = this.sharedPrompts.get(promptId);
+    if (!prompt) return false;
+
+    // Check if current user has admin permission
+    if (!this.canEditPrompt(promptId)) {
+      throw new Error('无权修改权限');
+    }
+
+    delete prompt.permissions[userId];
+    prompt.updatedAt = Date.now();
+
+    this.logAudit({
+      teamId: prompt.teamId,
+      action: 'permission_change',
+      resourceType: 'prompt_template',
+      resourceId: promptId,
+      resourceName: prompt.name,
+      details: { userId, action: 'remove' },
+    });
+
+    this.saveToStorage();
+    return true;
+  }
+
+  /**
    * Create shared prompt template
    */
   async createSharedPrompt(teamId: string, data: {
@@ -426,6 +563,7 @@ export class TeamCollaborationService {
       teamId,
       ...data,
       createdBy: this.currentUserId,
+      permissions: { [this.currentUserId]: 'admin' },
       createdAt: Date.now(),
       updatedAt: Date.now(),
       useCount: 0,
@@ -482,8 +620,8 @@ export class TeamCollaborationService {
     const prompt = this.sharedPrompts.get(promptId);
     if (!prompt) return false;
 
-    // Check if current user is the creator
-    if (prompt.createdBy !== this.currentUserId) {
+    // Check permission using canEditPrompt
+    if (!this.canEditPrompt(promptId)) {
       throw new Error('无权修改此模板');
     }
 
@@ -509,8 +647,8 @@ export class TeamCollaborationService {
     const prompt = this.sharedPrompts.get(promptId);
     if (!prompt) return false;
 
-    // Check if current user is the creator
-    if (prompt.createdBy !== this.currentUserId) {
+    // Check permission using canEditPrompt
+    if (!this.canEditPrompt(promptId)) {
       throw new Error('无权删除此模板');
     }
 
@@ -527,6 +665,114 @@ export class TeamCollaborationService {
 
     this.saveToStorage();
     return true;
+  }
+
+  /**
+   * Set prompt template permission
+   */
+  async setPromptPermission(promptId: string, userId: string, permission: 'read' | 'write' | 'admin'): Promise<boolean> {
+    const prompt = this.sharedPrompts.get(promptId);
+    if (!prompt) return false;
+
+    // Check if current user has admin permission
+    if (!this.canEditPrompt(promptId)) {
+      throw new Error('无权修改权限');
+    }
+
+    prompt.permissions[userId] = permission;
+    prompt.updatedAt = Date.now();
+
+    this.logAudit({
+      teamId: prompt.teamId,
+      action: 'permission_change',
+      resourceType: 'prompt_template',
+      resourceId: promptId,
+      resourceName: prompt.name,
+      details: { userId, permission },
+    });
+
+    this.saveToStorage();
+    return true;
+  }
+
+  /**
+   * Check if user can access prompt (read)
+   */
+  canAccessPrompt(promptId: string, userId?: string): boolean {
+    const uid = userId || this.currentUserId;
+    const prompt = this.sharedPrompts.get(promptId);
+    if (!prompt) return false;
+
+    // Owner or creator can always access
+    if (prompt.createdBy === uid) return true;
+
+    // Check explicit permission
+    if (prompt.permissions[uid]) return true;
+
+    // Team members with team-level admin/editor role can access
+    const team = this.teams.get(prompt.teamId);
+    if (team) {
+      const member = team.members.find(m => m.userId === uid);
+      if (member && (member.role === 'owner' || member.role === 'admin' || member.role === 'editor')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if user can edit prompt
+   */
+  canEditPrompt(promptId: string, userId?: string): boolean {
+    const uid = userId || this.currentUserId;
+    const prompt = this.sharedPrompts.get(promptId);
+    if (!prompt) return false;
+
+    // Creator can always edit
+    if (prompt.createdBy === uid) return true;
+
+    // Check explicit permission
+    if (prompt.permissions[uid] === 'admin' || prompt.permissions[uid] === 'write') return true;
+
+    // Team owners/admins can edit
+    const team = this.teams.get(prompt.teamId);
+    if (team) {
+      const member = team.members.find(m => m.userId === uid);
+      if (member && (member.role === 'owner' || member.role === 'admin')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get user's permission level for a prompt
+   */
+  getPromptPermission(promptId: string, userId?: string): 'owner' | 'admin' | 'write' | 'read' | null {
+    const uid = userId || this.currentUserId;
+    const prompt = this.sharedPrompts.get(promptId);
+    if (!prompt) return null;
+
+    if (prompt.createdBy === uid) return 'owner';
+    if (prompt.permissions[uid] === 'admin') return 'admin';
+    if (prompt.permissions[uid] === 'write') return 'write';
+    if (prompt.permissions[uid] === 'read') return 'read';
+
+    // Check team role
+    const team = this.teams.get(prompt.teamId);
+    if (team) {
+      const member = team.members.find(m => m.userId === uid);
+      if (member) {
+        if (member.role === 'owner') return 'owner';
+        if (member.role === 'admin') return 'admin';
+        if (member.role === 'editor') return 'write';
+        if (member.role === 'viewer') return 'read';
+      }
+    }
+
+    return null;
   }
 
   /**

@@ -29,6 +29,10 @@ export function TeamCollaborationPage() {
   const [editingPrompt, setEditingPrompt] = useState<SharedPromptTemplate | null>(null);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [showEditMemberRole, setShowEditMemberRole] = useState(false);
+  const [showKnowledgeBasePermission, setShowKnowledgeBasePermission] = useState(false);
+  const [showPromptPermission, setShowPromptPermission] = useState(false);
+  const [editingKnowledgeBase, setEditingKnowledgeBase] = useState<SharedKnowledgeBase | null>(null);
+  const [editingPromptForPermission, setEditingPromptForPermission] = useState<SharedPromptTemplate | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<SharedKnowledgeBase[]>([]);
   const [prompts, setPrompts] = useState<SharedPromptTemplate[]>([]);
@@ -226,6 +230,54 @@ export function TeamCollaborationPage() {
       loadTeamData(activeTeamId!);
     } catch (error) {
       alert('删除失败: ' + (error as Error).message);
+    }
+  };
+
+  // Knowledge Base Permission Handlers
+  const openKnowledgeBasePermission = (kb: SharedKnowledgeBase) => {
+    setEditingKnowledgeBase(kb);
+    setShowKnowledgeBasePermission(true);
+  };
+
+  const handleSetKnowledgeBasePermission = async (userId: string, permission: 'read' | 'write' | 'admin' | 'remove') => {
+    if (!editingKnowledgeBase) return;
+    
+    try {
+      if (permission === 'remove') {
+        await teamCollaborationService.removeKnowledgeBasePermission(editingKnowledgeBase.id, userId);
+      } else {
+        await teamCollaborationService.setKnowledgeBasePermission(editingKnowledgeBase.id, userId, permission);
+      }
+      loadTeamData(activeTeamId!);
+      // Refresh knowledge bases
+      const kbs = teamCollaborationService.getTeamKnowledgeBases(activeTeamId!);
+      setKnowledgeBases(kbs);
+    } catch (error) {
+      alert('设置权限失败: ' + (error as Error).message);
+    }
+  };
+
+  // Prompt Permission Handlers
+  const openPromptPermission = (prompt: SharedPromptTemplate) => {
+    setEditingPromptForPermission(prompt);
+    setShowPromptPermission(true);
+  };
+
+  const handleSetPromptPermission = async (userId: string, permission: 'read' | 'write' | 'admin' | 'remove') => {
+    if (!editingPromptForPermission) return;
+    
+    try {
+      if (permission === 'remove') {
+        await teamCollaborationService.removePromptPermission(editingPromptForPermission.id, userId);
+      } else {
+        await teamCollaborationService.setPromptPermission(editingPromptForPermission.id, userId, permission);
+      }
+      loadTeamData(activeTeamId!);
+      // Refresh prompts
+      const pts = teamCollaborationService.getTeamPrompts(activeTeamId!);
+      setPrompts(pts);
+    } catch (error) {
+      alert('设置权限失败: ' + (error as Error).message);
     }
   };
 
@@ -527,16 +579,32 @@ export function TeamCollaborationPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    {knowledgeBases.map(kb => (
-                      <div key={kb.id} className="glass-card rounded-xl p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <Database className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
-                          <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{kb.documentCount} 文档</span>
+                    {knowledgeBases.map(kb => {
+                      const kbPermission = teamCollaborationService.getKnowledgeBasePermission(kb.id);
+                      const canManagePermission = kbPermission === 'owner' || kbPermission === 'admin';
+                      
+                      return (
+                        <div key={kb.id} className="glass-card rounded-xl p-4 group">
+                          <div className="flex items-start justify-between mb-2">
+                            <Database className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{kb.documentCount} 文档</span>
+                              {canManagePermission && (
+                                <button
+                                  onClick={() => openKnowledgeBasePermission(kb)}
+                                  className="p-1 rounded hover:bg-blue-500/20 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="管理权限"
+                                >
+                                  <Shield className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <h5 className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>{kb.name}</h5>
+                          <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{kb.description}</p>
                         </div>
-                        <h5 className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>{kb.name}</h5>
-                        <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{kb.description}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -556,44 +624,57 @@ export function TeamCollaborationPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    {prompts.map(prompt => (
-                      <div key={prompt.id} className="glass-card rounded-xl p-4 group">
-                        <div className="flex items-start justify-between mb-2">
-                          <FileText className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-white/5" style={{ color: 'var(--t-text-muted)' }}>
-                              使用 {prompt.useCount} 次
-                            </span>
-                            {/* Show edit/delete buttons for creator */}
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                              <button
-                                onClick={() => handleEditPrompt(prompt)}
-                                className="p-1 rounded hover:bg-blue-500/20 text-blue-400 transition-colors"
-                                title="编辑模板"
-                              >
-                                <Edit3 className="h-3 w-3" />
-                              </button>
-                              <button
-                                onClick={() => handleDeletePrompt(prompt.id)}
-                                className="p-1 rounded hover:bg-red-500/20 text-red-400 transition-colors"
-                                title="删除模板"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
+                    {prompts.map(prompt => {
+                      const canEdit = teamCollaborationService.canEditPrompt(prompt.id);
+                      
+                      return (
+                        <div key={prompt.id} className="glass-card rounded-xl p-4 group">
+                          <div className="flex items-start justify-between mb-2">
+                            <FileText className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-white/5" style={{ color: 'var(--t-text-muted)' }}>
+                                使用 {prompt.useCount} 次
+                              </span>
+                              {/* Show permission/manage buttons for owner/admin */}
+                              {canEdit && (
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                  <button
+                                    onClick={() => openPromptPermission(prompt)}
+                                    className="p-1 rounded hover:bg-green-500/20 text-green-400 transition-colors"
+                                    title="管理权限"
+                                  >
+                                    <Shield className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEditPrompt(prompt)}
+                                    className="p-1 rounded hover:bg-blue-500/20 text-blue-400 transition-colors"
+                                    title="编辑模板"
+                                  >
+                                    <Edit3 className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePrompt(prompt.id)}
+                                    className="p-1 rounded hover:bg-red-500/20 text-red-400 transition-colors"
+                                    title="删除模板"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
+                          <h5 className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>{prompt.name}</h5>
+                          <p className="text-xs mb-2" style={{ color: 'var(--t-text-muted)' }}>{prompt.description}</p>
+                          <div className="flex gap-2">
+                            {prompt.tags.map(tag => (
+                              <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-white/5" style={{ color: 'var(--t-text-muted)' }}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                        <h5 className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>{prompt.name}</h5>
-                        <p className="text-xs mb-2" style={{ color: 'var(--t-text-muted)' }}>{prompt.description}</p>
-                        <div className="flex gap-2">
-                          {prompt.tags.map(tag => (
-                            <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-white/5" style={{ color: 'var(--t-text-muted)' }}>
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -989,6 +1070,142 @@ export function TeamCollaborationPage() {
                 className="flex-1 px-4 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 text-sm transition-colors"
               >
                 保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Knowledge Base Permission Modal */}
+      {showKnowledgeBasePermission && editingKnowledgeBase && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="glass-card rounded-2xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--t-text)' }}>
+              管理知识库权限
+            </h3>
+            <p className="text-sm mb-4" style={{ color: 'var(--t-text-muted)' }}>
+              {editingKnowledgeBase.name}
+            </p>
+            
+            <div className="space-y-3">
+              <div className="text-sm font-medium mb-2" style={{ color: 'var(--t-text-secondary)' }}>
+                团队成员权限
+              </div>
+              {members.filter(m => m.userId !== editingKnowledgeBase.ownerId).map(member => {
+                const currentPermission = editingKnowledgeBase.permissions[member.userId];
+                
+                return (
+                  <div key={member.id} className="p-3 rounded-xl bg-white/5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{member.avatar}</span>
+                      <div>
+                        <div className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>{member.name}</div>
+                        <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+                          团队角色: {getRoleLabel(member.role)}
+                        </div>
+                      </div>
+                    </div>
+                    <select
+                      value={currentPermission || ''}
+                      onChange={(e) => handleSetKnowledgeBasePermission(member.userId, e.target.value as any)}
+                      className="glass-input rounded-lg py-1 px-2 text-sm"
+                      style={{ color: 'var(--t-text)' }}
+                    >
+                      <option value="">继承团队角色</option>
+                      <option value="read">只读</option>
+                      <option value="write">可编辑</option>
+                      <option value="admin">管理员</option>
+                      {currentPermission && <option value="remove">移除权限</option>}
+                    </select>
+                  </div>
+                );
+              })}
+              
+              {members.filter(m => m.userId !== editingKnowledgeBase.ownerId).length === 0 && (
+                <p className="text-sm text-center py-4" style={{ color: 'var(--t-text-muted)' }}>
+                  没有其他团队成员
+                </p>
+              )}
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowKnowledgeBasePermission(false);
+                  setEditingKnowledgeBase(null);
+                }}
+                className="flex-1 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
+                style={{ color: 'var(--t-text)' }}
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt Permission Modal */}
+      {showPromptPermission && editingPromptForPermission && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="glass-card rounded-2xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--t-text)' }}>
+              管理模板权限
+            </h3>
+            <p className="text-sm mb-4" style={{ color: 'var(--t-text-muted)' }}>
+              {editingPromptForPermission.name}
+            </p>
+            
+            <div className="space-y-3">
+              <div className="text-sm font-medium mb-2" style={{ color: 'var(--t-text-secondary)' }}>
+                团队成员权限
+              </div>
+              {members.filter(m => m.userId !== editingPromptForPermission.createdBy).map(member => {
+                const currentPermission = editingPromptForPermission.permissions[member.userId];
+                
+                return (
+                  <div key={member.id} className="p-3 rounded-xl bg-white/5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{member.avatar}</span>
+                      <div>
+                        <div className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>{member.name}</div>
+                        <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+                          团队角色: {getRoleLabel(member.role)}
+                        </div>
+                      </div>
+                    </div>
+                    <select
+                      value={currentPermission || ''}
+                      onChange={(e) => handleSetPromptPermission(member.userId, e.target.value as any)}
+                      className="glass-input rounded-lg py-1 px-2 text-sm"
+                      style={{ color: 'var(--t-text)' }}
+                    >
+                      <option value="">继承团队角色</option>
+                      <option value="read">只读</option>
+                      <option value="write">可编辑</option>
+                      <option value="admin">管理员</option>
+                      {currentPermission && <option value="remove">移除权限</option>}
+                    </select>
+                  </div>
+                );
+              })}
+              
+              {members.filter(m => m.userId !== editingPromptForPermission.createdBy).length === 0 && (
+                <p className="text-sm text-center py-4" style={{ color: 'var(--t-text-muted)' }}>
+                  没有其他团队成员
+                </p>
+              )}
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowPromptPermission(false);
+                  setEditingPromptForPermission(null);
+                }}
+                className="flex-1 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
+                style={{ color: 'var(--t-text)' }}
+              >
+                关闭
               </button>
             </div>
           </div>
