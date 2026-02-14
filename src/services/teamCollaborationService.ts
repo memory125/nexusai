@@ -476,6 +476,91 @@ export class TeamCollaborationService {
   }
 
   /**
+   * Update shared prompt template
+   */
+  async updateSharedPrompt(promptId: string, data: Partial<Omit<SharedPromptTemplate, 'id' | 'teamId' | 'createdBy' | 'createdAt'>>): Promise<boolean> {
+    const prompt = this.sharedPrompts.get(promptId);
+    if (!prompt) return false;
+
+    // Check if current user is the creator
+    if (prompt.createdBy !== this.currentUserId) {
+      throw new Error('无权修改此模板');
+    }
+
+    Object.assign(prompt, data, { updatedAt: Date.now() });
+
+    this.logAudit({
+      teamId: prompt.teamId,
+      action: 'update',
+      resourceType: 'prompt_template',
+      resourceId: promptId,
+      resourceName: prompt.name,
+      details: {},
+    });
+
+    this.saveToStorage();
+    return true;
+  }
+
+  /**
+   * Delete shared prompt template
+   */
+  async deleteSharedPrompt(promptId: string): Promise<boolean> {
+    const prompt = this.sharedPrompts.get(promptId);
+    if (!prompt) return false;
+
+    // Check if current user is the creator
+    if (prompt.createdBy !== this.currentUserId) {
+      throw new Error('无权删除此模板');
+    }
+
+    this.sharedPrompts.delete(promptId);
+
+    this.logAudit({
+      teamId: prompt.teamId,
+      action: 'delete',
+      resourceType: 'prompt_template',
+      resourceId: promptId,
+      resourceName: prompt.name,
+      details: {},
+    });
+
+    this.saveToStorage();
+    return true;
+  }
+
+  /**
+   * Update team information
+   */
+  async updateTeam(teamId: string, data: { name?: string; description?: string; avatar?: string }): Promise<boolean> {
+    const team = this.teams.get(teamId);
+    if (!team) return false;
+
+    // Check permission
+    const myRole = this.getMyRoleInTeam(teamId);
+    if (!myRole || (myRole !== 'owner' && myRole !== 'admin')) {
+      throw new Error('无权编辑团队信息');
+    }
+
+    if (data.name) team.name = data.name;
+    if (data.description) team.description = data.description;
+    if (data.avatar) team.avatar = data.avatar;
+    team.updatedAt = Date.now();
+
+    this.logAudit({
+      teamId,
+      action: 'update',
+      resourceType: 'team',
+      resourceId: teamId,
+      resourceName: team.name,
+      details: data,
+    });
+
+    this.saveToStorage();
+    return true;
+  }
+
+  /**
    * Get audit logs for team
    */
   getAuditLogs(teamId: string, options?: { limit?: number; offset?: number }): AuditLogEntry[] {

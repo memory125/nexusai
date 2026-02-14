@@ -135,7 +135,7 @@ export function DataManagementPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-3xl space-y-6">
+        <div className="space-y-6">
           {/* Storage Stats */}
           <section className="glass-card rounded-2xl p-5">
             <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: 'var(--t-text)' }}>

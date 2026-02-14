@@ -22,8 +22,13 @@ export function TeamCollaborationPage() {
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showEditTeam, setShowEditTeam] = useState(false);
   const [showInviteMember, setShowInviteMember] = useState(false);
   const [showCreatePrompt, setShowCreatePrompt] = useState(false);
+  const [showEditPrompt, setShowEditPrompt] = useState(false);
+  const [editingPrompt, setEditingPrompt] = useState<SharedPromptTemplate | null>(null);
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+  const [showEditMemberRole, setShowEditMemberRole] = useState(false);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<SharedKnowledgeBase[]>([]);
   const [prompts, setPrompts] = useState<SharedPromptTemplate[]>([]);
@@ -152,6 +157,105 @@ export function TeamCollaborationPage() {
     }
   };
 
+  const handleDeleteTeam = async () => {
+    if (!activeTeamId) return;
+    if (!confirm('确定要删除该团队吗？此操作不可撤销，所有团队数据将被永久删除。')) return;
+    
+    try {
+      await teamCollaborationService.deleteTeam(activeTeamId);
+      setActiveTeamId(null);
+      loadTeams();
+    } catch (error) {
+      alert('删除失败: ' + (error as Error).message);
+    }
+  };
+
+  const handleUpdateTeam = async () => {
+    if (!activeTeamId || !newTeamName.trim()) return;
+    
+    try {
+      await teamCollaborationService.updateTeam(activeTeamId, {
+        name: newTeamName,
+        description: newTeamDesc,
+      });
+      loadTeams();
+      loadTeamData(activeTeamId);
+      setShowEditTeam(false);
+      setNewTeamName('');
+      setNewTeamDesc('');
+    } catch (error) {
+      alert('更新失败: ' + (error as Error).message);
+    }
+  };
+
+  const handleEditPrompt = (prompt: SharedPromptTemplate) => {
+    setEditingPrompt(prompt);
+    setPromptName(prompt.name);
+    setPromptDesc(prompt.description);
+    setPromptContent(prompt.content);
+    setPromptCategory(prompt.category);
+    setShowEditPrompt(true);
+  };
+
+  const handleUpdatePrompt = async () => {
+    if (!editingPrompt || !promptName.trim() || !promptContent.trim()) return;
+    
+    try {
+      await teamCollaborationService.updateSharedPrompt(editingPrompt.id, {
+        name: promptName,
+        description: promptDesc,
+        content: promptContent,
+        category: promptCategory,
+      });
+      loadTeamData(activeTeamId!);
+      setShowEditPrompt(false);
+      setEditingPrompt(null);
+      setPromptName('');
+      setPromptDesc('');
+      setPromptContent('');
+    } catch (error) {
+      alert('更新失败: ' + (error as Error).message);
+    }
+  };
+
+  const handleDeletePrompt = async (promptId: string) => {
+    if (!confirm('确定要删除这个模板吗？')) return;
+    
+    try {
+      await teamCollaborationService.deleteSharedPrompt(promptId);
+      loadTeamData(activeTeamId!);
+    } catch (error) {
+      alert('删除失败: ' + (error as Error).message);
+    }
+  };
+
+  const handleEditMemberRole = (member: TeamMember) => {
+    setEditingMember(member);
+    setInviteRole(member.role);
+    setShowEditMemberRole(true);
+  };
+
+  const handleUpdateMemberRole = async () => {
+    if (!activeTeamId || !editingMember) return;
+    
+    try {
+      await teamCollaborationService.changeMemberRole(activeTeamId, editingMember.id, inviteRole);
+      loadTeamData(activeTeamId);
+      setShowEditMemberRole(false);
+      setEditingMember(null);
+    } catch (error) {
+      alert('更新失败: ' + (error as Error).message);
+    }
+  };
+
+  const openEditTeamModal = () => {
+    if (activeTeam) {
+      setNewTeamName(activeTeam.name);
+      setNewTeamDesc(activeTeam.description);
+      setShowEditTeam(true);
+    }
+  };
+
   const getRoleIcon = (role: TeamRole) => {
     switch (role) {
       case 'owner': return <Crown className="h-4 w-4 text-amber-400" />;
@@ -249,13 +353,34 @@ export function TeamCollaborationPage() {
                     {getRoleLabel(myRole)}
                   </span>
                 )}
-                <button
-                  onClick={handleLeaveTeam}
-                  className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
-                  title="离开团队"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
+                {(myRole === 'owner' || myRole === 'admin') && (
+                  <button
+                    onClick={openEditTeamModal}
+                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                    style={{ color: 'var(--t-text-muted)' }}
+                    title="编辑团队"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </button>
+                )}
+                {myRole === 'owner' && (
+                  <button
+                    onClick={handleDeleteTeam}
+                    className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
+                    title="删除团队"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+                {myRole !== 'owner' && (
+                  <button
+                    onClick={handleLeaveTeam}
+                    className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
+                    title="离开团队"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -366,12 +491,22 @@ export function TeamCollaborationPage() {
                           {getRoleLabel(member.role)}
                         </span>
                         {myRole === 'owner' && member.role !== 'owner' && (
-                          <button
-                            onClick={() => handleRemoveMember(member.id)}
-                            className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleEditMemberRole(member)}
+                              className="p-2 rounded-lg hover:bg-blue-500/20 text-blue-400 transition-colors"
+                              title="修改角色"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRemoveMember(member.id)}
+                              className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
+                              title="移除成员"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     ))}
@@ -422,12 +557,31 @@ export function TeamCollaborationPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     {prompts.map(prompt => (
-                      <div key={prompt.id} className="glass-card rounded-xl p-4">
+                      <div key={prompt.id} className="glass-card rounded-xl p-4 group">
                         <div className="flex items-start justify-between mb-2">
                           <FileText className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-white/5" style={{ color: 'var(--t-text-muted)' }}>
-                            使用 {prompt.useCount} 次
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-white/5" style={{ color: 'var(--t-text-muted)' }}>
+                              使用 {prompt.useCount} 次
+                            </span>
+                            {/* Show edit/delete buttons for creator */}
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                              <button
+                                onClick={() => handleEditPrompt(prompt)}
+                                className="p-1 rounded hover:bg-blue-500/20 text-blue-400 transition-colors"
+                                title="编辑模板"
+                              >
+                                <Edit3 className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeletePrompt(prompt.id)}
+                                className="p-1 rounded hover:bg-red-500/20 text-red-400 transition-colors"
+                                title="删除模板"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                         <h5 className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>{prompt.name}</h5>
                         <p className="text-xs mb-2" style={{ color: 'var(--t-text-muted)' }}>{prompt.description}</p>
@@ -654,6 +808,187 @@ export function TeamCollaborationPage() {
                 className="flex-1 px-4 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 text-sm transition-colors disabled:opacity-50"
               >
                 创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Team Modal */}
+      {showEditTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="glass-card rounded-2xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--t-text)' }}>编辑团队信息</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm block mb-2" style={{ color: 'var(--t-text-secondary)' }}>团队名称</label>
+                <input
+                  value={newTeamName}
+                  onChange={e => setNewTeamName(e.target.value)}
+                  className="glass-input w-full rounded-xl py-2 px-3 text-sm"
+                  placeholder="输入团队名称..."
+                  style={{ color: 'var(--t-text)' }}
+                />
+              </div>
+              <div>
+                <label className="text-sm block mb-2" style={{ color: 'var(--t-text-secondary)' }}>描述</label>
+                <textarea
+                  value={newTeamDesc}
+                  onChange={e => setNewTeamDesc(e.target.value)}
+                  className="glass-input w-full rounded-xl py-2 px-3 text-sm h-20"
+                  placeholder="输入团队描述..."
+                  style={{ color: 'var(--t-text)' }}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowEditTeam(false)}
+                className="flex-1 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
+                style={{ color: 'var(--t-text)' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleUpdateTeam}
+                disabled={!newTeamName.trim()}
+                className="flex-1 px-4 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 text-sm transition-colors disabled:opacity-50"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Prompt Modal */}
+      {showEditPrompt && editingPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="glass-card rounded-2xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--t-text)' }}>编辑模板</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm block mb-2" style={{ color: 'var(--t-text-secondary)' }}>模板名称</label>
+                <input
+                  value={promptName}
+                  onChange={e => setPromptName(e.target.value)}
+                  className="glass-input w-full rounded-xl py-2 px-3 text-sm"
+                  placeholder="输入模板名称..."
+                  style={{ color: 'var(--t-text)' }}
+                />
+              </div>
+              <div>
+                <label className="text-sm block mb-2" style={{ color: 'var(--t-text-secondary)' }}>描述</label>
+                <input
+                  value={promptDesc}
+                  onChange={e => setPromptDesc(e.target.value)}
+                  className="glass-input w-full rounded-xl py-2 px-3 text-sm"
+                  placeholder="简要描述这个模板的用途..."
+                  style={{ color: 'var(--t-text)' }}
+                />
+              </div>
+              <div>
+                <label className="text-sm block mb-2" style={{ color: 'var(--t-text-secondary)' }}>分类</label>
+                <select
+                  value={promptCategory}
+                  onChange={e => setPromptCategory(e.target.value)}
+                  className="glass-input w-full rounded-xl py-2 px-3 text-sm"
+                  style={{ color: 'var(--t-text)' }}
+                >
+                  <option value="general">通用</option>
+                  <option value="coding">编程</option>
+                  <option value="writing">写作</option>
+                  <option value="analysis">分析</option>
+                  <option value="creative">创意</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm block mb-2" style={{ color: 'var(--t-text-secondary)' }}>模板内容</label>
+                <textarea
+                  value={promptContent}
+                  onChange={e => setPromptContent(e.target.value)}
+                  className="glass-input w-full rounded-xl py-2 px-3 text-sm h-32"
+                  placeholder="输入提示词模板内容..."
+                  style={{ color: 'var(--t-text)' }}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditPrompt(false);
+                  setEditingPrompt(null);
+                }}
+                className="flex-1 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
+                style={{ color: 'var(--t-text)' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleUpdatePrompt}
+                disabled={!promptName.trim() || !promptContent.trim()}
+                className="flex-1 px-4 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 text-sm transition-colors disabled:opacity-50"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Member Role Modal */}
+      {showEditMemberRole && editingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="glass-card rounded-2xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--t-text)' }}>修改成员角色</h3>
+            <div className="mb-4 p-3 rounded-xl bg-white/5">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{editingMember.avatar}</span>
+                <div>
+                  <div className="font-medium" style={{ color: 'var(--t-text)' }}>{editingMember.name}</div>
+                  <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{editingMember.email}</div>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm block" style={{ color: 'var(--t-text-secondary)' }}>选择新角色</label>
+              {(['viewer', 'editor', 'admin'] as TeamRole[]).map(role => (
+                <button
+                  key={role}
+                  onClick={() => setInviteRole(role)}
+                  className={`w-full p-3 rounded-xl flex items-center gap-3 transition-colors ${
+                    inviteRole === role ? 'bg-indigo-500/20 ring-1 ring-indigo-500/50' : 'bg-white/5 hover:bg-white/10'
+                  }`}
+                >
+                  {getRoleIcon(role)}
+                  <div className="text-left">
+                    <div className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>{getRoleLabel(role)}</div>
+                    <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+                      {role === 'viewer' && '只能查看团队内容'}
+                      {role === 'editor' && '可以编辑知识库和模板'}
+                      {role === 'admin' && '可以管理成员和设置'}
+                    </div>
+                  </div>
+                  {inviteRole === role && <div className="ml-auto w-2 h-2 rounded-full bg-indigo-400" />}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditMemberRole(false);
+                  setEditingMember(null);
+                }}
+                className="flex-1 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
+                style={{ color: 'var(--t-text)' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleUpdateMemberRole}
+                className="flex-1 px-4 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 text-sm transition-colors"
+              >
+                保存
               </button>
             </div>
           </div>
