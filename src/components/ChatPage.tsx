@@ -1,14 +1,37 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore, modelProviders } from '../store';
-import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, FileCode, Search, Star, Plus, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, FileCode, Search, Star, Plus, ThumbsUp, ThumbsDown, Download, Copy, FileJson, File } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
 import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
 import { RAGService } from '../services/ragService';
 import { multimodalService } from '../services/multimodalService';
 import { conversationTemplateService, ConversationTemplate, TemplateCategory } from '../services/conversationTemplateService';
 import { messageRatingService, Rating } from '../services/messageRatingService';
+import { conversationExportService } from '../services/conversationExportService';
 import type { Attachment } from '../types/multimodal';
 import { formatFileSize } from '../types/multimodal';
+
+// Helper functions for export
+function downloadFile(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('已复制到剪贴板！');
+  } catch (err) {
+    console.error('Failed to copy:', err);
+  }
+}
 
 // Template Selector Modal Component
 function TemplateSelectorModal({ 
@@ -423,6 +446,7 @@ export function ChatPage() {
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [showExportModal, setShowExportModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -848,12 +872,20 @@ export function ChatPage() {
       {/* Chat Header */}
       <div className="flex items-center gap-3 px-6 py-3" style={{ borderBottom: '1px solid var(--t-glass-border)' }}>
         {activeAgent && <span className="text-xl">{activeAgent.icon}</span>}
-        <div>
+        <div className="flex-1">
           <h3 className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>{activeConv.title}</h3>
           <p className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
             <ProviderIcon id={selectedProvider} size={12} /> {currentModel?.name} · {activeConv.messages.length} 条消息
           </p>
         </div>
+        <button
+          onClick={() => setShowExportModal(true)}
+          className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+          style={{ color: 'var(--t-text-muted)' }}
+          title="导出对话"
+        >
+          <Download className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Messages */}
@@ -1064,6 +1096,106 @@ export function ChatPage() {
               >
                 应用模板
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && activeConv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="glass-card rounded-2xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Download className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
+                <h3 className="text-lg font-semibold" style={{ color: 'var(--t-text)' }}>
+                  导出对话
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                style={{ color: 'var(--t-text-muted)' }}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm" style={{ color: 'var(--t-text-secondary)' }}>
+                选择导出格式：
+              </p>
+
+              {/* Export Format Options */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    const content = conversationExportService.exportConversation(activeConv, { format: 'markdown' });
+                    downloadFile(content, `${activeConv.title}.md`, 'text/markdown');
+                    setShowExportModal(false);
+                  }}
+                  className="p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+                >
+                  <FileText className="h-6 w-6 mb-2" style={{ color: 'var(--t-accent-light)' }} />
+                  <div className="font-medium text-sm" style={{ color: 'var(--t-text)' }}>Markdown</div>
+                  <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>.md 格式</div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const content = conversationExportService.exportConversation(activeConv, { format: 'json' });
+                    downloadFile(content, `${activeConv.title}.json`, 'application/json');
+                    setShowExportModal(false);
+                  }}
+                  className="p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+                >
+                  <FileJson className="h-6 w-6 mb-2" style={{ color: 'var(--t-accent-light)' }} />
+                  <div className="font-medium text-sm" style={{ color: 'var(--t-text)' }}>JSON</div>
+                  <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>.json 格式</div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const content = conversationExportService.exportConversation(activeConv, { format: 'txt' });
+                    downloadFile(content, `${activeConv.title}.txt`, 'text/plain');
+                    setShowExportModal(false);
+                  }}
+                  className="p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+                >
+                  <File className="h-6 w-6 mb-2" style={{ color: 'var(--t-accent-light)' }} />
+                  <div className="font-medium text-sm" style={{ color: 'var(--t-text)' }}>纯文本</div>
+                  <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>.txt 格式</div>
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const content = conversationExportService.exportConversation(activeConv, { format: 'markdown' });
+                    await copyToClipboard(content);
+                    setShowExportModal(false);
+                  }}
+                  className="p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+                >
+                  <Copy className="h-6 w-6 mb-2" style={{ color: 'var(--t-accent-light)' }} />
+                  <div className="font-medium text-sm" style={{ color: 'var(--t-text)' }}>复制内容</div>
+                  <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>到剪贴板</div>
+                </button>
+              </div>
+
+              {/* Options */}
+              <div className="pt-4 border-t" style={{ borderColor: 'var(--t-glass-border)' }}>
+                <label className="flex items-center gap-2 text-sm mb-3" style={{ color: 'var(--t-text-secondary)' }}>
+                  <input type="checkbox" defaultChecked className="rounded" />
+                  包含元数据（模型、时间等）
+                </label>
+                <label className="flex items-center gap-2 text-sm mb-3" style={{ color: 'var(--t-text-secondary)' }}>
+                  <input type="checkbox" defaultChecked className="rounded" />
+                  包含时间戳
+                </label>
+                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--t-text-secondary)' }}>
+                  <input type="checkbox" defaultChecked className="rounded" />
+                  过滤系统消息
+                </label>
+              </div>
             </div>
           </div>
         </div>
