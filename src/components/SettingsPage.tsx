@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore, modelProviders, themeConfigs } from '../store';
 import type { ThemeId } from '../store';
-import { Settings, User, Key, Palette, Bell, Shield, LogOut, Check, Monitor, Sun, Moon, Sparkles } from 'lucide-react';
+import { Settings, User, Key, Palette, Bell, Shield, LogOut, Check, Monitor, Sun, Moon, Sparkles, X, Eye, Zap } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
 
 function ThemeCard({ themeId, name, description, preview, isActive, onClick }: {
@@ -161,6 +161,9 @@ export function SettingsPage() {
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel);
   const configuredKeys = Object.entries(apiKeys).filter(([, v]) => v);
 
+  // Theme preview state
+  const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null);
+
   const [preferences, setPreferences] = useState<Record<string, boolean>>({
     '消息提醒': true,
     '自动保存': true,
@@ -177,6 +180,24 @@ export function SettingsPage() {
   const lightThemes = themeConfigs.filter(t => t.id.startsWith('light'));
 
   const currentTheme = themeConfigs.find(t => t.id === theme);
+
+  // Handle theme click - show preview instead of directly applying
+  const handleThemeClick = (themeId: ThemeId) => {
+    setPreviewTheme(themeId);
+  };
+
+  // Apply the previewed theme
+  const handleApplyTheme = () => {
+    if (previewTheme) {
+      setTheme(previewTheme);
+      setPreviewTheme(null);
+    }
+  };
+
+  // Cancel preview
+  const handleCancelPreview = () => {
+    setPreviewTheme(null);
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -272,7 +293,7 @@ export function SettingsPage() {
                     description={t.description}
                     preview={t.preview}
                     isActive={theme === t.id}
-                    onClick={() => setTheme(t.id)}
+                    onClick={() => handleThemeClick(t.id)}
                   />
                 ))}
               </div>
@@ -299,7 +320,7 @@ export function SettingsPage() {
                     description={t.description}
                     preview={t.preview}
                     isActive={theme === t.id}
-                    onClick={() => setTheme(t.id)}
+                    onClick={() => handleThemeClick(t.id)}
                   />
                 ))}
               </div>
@@ -479,6 +500,157 @@ export function SettingsPage() {
           </div>
 
         </div>
+
+        {/* Theme Preview Modal */}
+        {previewTheme && (() => {
+          const previewingTheme = themeConfigs.find(t => t.id === previewTheme);
+          if (!previewingTheme) return null;
+          
+          const isLight = previewTheme.startsWith('light');
+          
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="glass-card rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <Eye className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
+                    <div>
+                      <h3 className="text-lg font-semibold" style={{ color: 'var(--t-text)' }}>
+                        预览主题
+                      </h3>
+                      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+                        {previewingTheme.name}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCancelPreview}
+                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                    style={{ color: 'var(--t-text-muted)' }}
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Preview Content */}
+                <div className="space-y-6">
+                  {/* Large Preview Canvas */}
+                  <div
+                    className="relative h-48 overflow-hidden rounded-xl"
+                    style={{
+                      background: `linear-gradient(135deg, ${previewingTheme.preview.bg1}, ${previewingTheme.preview.bg2})`,
+                    }}
+                  >
+                    {/* Background orbs */}
+                    <div
+                      className="absolute -top-10 -left-10 h-32 w-32 rounded-full opacity-50"
+                      style={{ background: previewingTheme.preview.bg3, filter: 'blur(20px)' }}
+                    />
+                    <div
+                      className="absolute -bottom-5 -right-5 h-24 w-24 rounded-full opacity-40"
+                      style={{ background: previewingTheme.preview.accent, filter: 'blur(15px)' }}
+                    />
+                    
+                    {/* Mock UI */}
+                    <div className="absolute inset-4 flex gap-3">
+                      {/* Sidebar */}
+                      <div
+                        className="w-20 rounded-lg flex flex-col gap-2 p-2"
+                        style={{
+                          background: isLight ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.1)',
+                          border: `1px solid ${isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)'}`,
+                        }}
+                      >
+                        <div className="h-6 w-full rounded-md" style={{ background: previewingTheme.preview.accent }} />
+                        <div className="h-3 w-full rounded-full" style={{ background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.15)' }} />
+                        <div className="h-3 w-3/4 rounded-full" style={{ background: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)' }} />
+                        <div className="h-3 w-full rounded-full" style={{ background: isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)' }} />
+                        <div className="h-3 w-2/3 rounded-full" style={{ background: isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.06)' }} />
+                      </div>
+                      
+                      {/* Main Content */}
+                      <div className="flex-1 flex flex-col gap-2">
+                        {/* Header */}
+                        <div className="h-8 rounded-lg flex items-center px-3" style={{ 
+                          background: isLight ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.08)',
+                          border: `1px solid ${isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)'}`
+                        }}>
+                          <div className="h-4 w-20 rounded" style={{ background: isLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.2)' }} />
+                        </div>
+                        
+                        {/* Messages */}
+                        <div className="flex-1 rounded-lg p-2" style={{ 
+                          background: isLight ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.05)',
+                          border: `1px solid ${isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.06)'}`
+                        }}>
+                          <div className="h-4 w-3/4 rounded mb-2" style={{ background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.15)' }} />
+                          <div className="h-4 w-full rounded mb-2" style={{ background: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)' }} />
+                          <div className="h-4 w-1/2 rounded" style={{ background: previewingTheme.preview.accent + '40' }} />
+                        </div>
+                        
+                        {/* Input */}
+                        <div className="h-10 rounded-lg flex items-center px-3" style={{ 
+                          background: isLight ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.1)',
+                          border: `1px solid ${isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)'}`
+                        }}>
+                          <div className="h-3 flex-1 rounded" style={{ background: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.15)' }} />
+                          <div className="h-6 w-6 rounded ml-2" style={{ background: previewingTheme.preview.accent }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Theme Info */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl" style={{ background: 'var(--t-glass-card)' }}>
+                      <div className="text-xs mb-2" style={{ color: 'var(--t-text-muted)' }}>主色调</div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded" style={{ background: previewingTheme.preview.accent }} />
+                        <span className="text-sm" style={{ color: 'var(--t-text)' }}>{previewingTheme.preview.accent}</span>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl" style={{ background: 'var(--t-glass-card)' }}>
+                      <div className="text-xs mb-2" style={{ color: 'var(--t-text-muted)' }}>背景色</div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded" style={{ background: previewingTheme.preview.bg1 }} />
+                        <span className="text-sm" style={{ color: 'var(--t-text)' }}>{previewingTheme.preview.bg1}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-sm" style={{ color: 'var(--t-text-secondary)' }}>
+                    {previewingTheme.description}
+                  </p>
+
+                  {/* Actions */}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleCancelPreview}
+                      className="flex-1 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
+                      style={{ color: 'var(--t-text)' }}
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleApplyTheme}
+                      className="flex-1 px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm"
+                      style={{ 
+                        background: previewingTheme.preview.accent + '20', 
+                        color: previewingTheme.preview.accent,
+                        border: `1px solid ${previewingTheme.preview.accent}40`
+                      }}
+                    >
+                      <Zap className="h-4 w-4" />
+                      应用主题
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
