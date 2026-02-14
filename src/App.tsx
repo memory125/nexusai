@@ -11,6 +11,7 @@ import { ProjectPage } from './components/ProjectPage';
 import { KnowledgeBasePage } from './components/KnowledgeBasePage';
 import { MCPPage } from './components/MCPPage';
 import { PluginPage } from './components/PluginPage';
+import { WorkflowPage } from './components/WorkflowPage';
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { theme } = useStore();
@@ -75,6 +76,7 @@ function MainLayout() {
       case 'project': return <ProjectPage />;
       case 'mcp': return <MCPPage />;
       case 'plugins': return <PluginPage />;
+      case 'workflow': return <WorkflowPage />;
       case 'settings': return <SettingsPage />;
       default: return <ChatPage />;
     }
