@@ -47,6 +47,15 @@ export interface Conversation {
   model: string;
   provider: string;
   agentId?: string;
+  folderId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChatFolder {
+  id: string;
+  name: string;
+  color: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -206,6 +215,13 @@ interface AppState {
   setActiveConversation: (id: string) => void;
   deleteConversation: (id: string) => void;
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
+
+  // Chat Folders
+  folders: ChatFolder[];
+  createFolder: (name: string, color?: string) => string;
+  deleteFolder: (id: string) => void;
+  updateFolder: (id: string, updates: Partial<Pick<ChatFolder, 'name' | 'color'>>) => void;
+  moveToFolder: (conversationId: string, folderId?: string) => void;
 
   // Models
   selectedProvider: string;
@@ -1178,6 +1194,41 @@ export const useStore = create<AppState>((set, get) => ({
       }, 1200 + Math.random() * 1500);
     }
   },
+
+  // Chat Folders
+  folders: [],
+  createFolder: (name, color = '#6366f1') => {
+    const id = 'folder_' + Math.random().toString(36).slice(2, 10);
+    const folder: ChatFolder = {
+      id,
+      name,
+      color,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    set(s => ({ folders: [...s.folders, folder] }));
+    return id;
+  },
+  deleteFolder: (id) => set(s => {
+    // Move conversations in this folder to no folder
+    const updatedConvs = s.conversations.map(c =>
+      c.folderId === id ? { ...c, folderId: undefined } : c
+    );
+    return {
+      folders: s.folders.filter(f => f.id !== id),
+      conversations: updatedConvs,
+    };
+  }),
+  updateFolder: (id, updates) => set(s => ({
+    folders: s.folders.map(f =>
+      f.id === id ? { ...f, ...updates, updatedAt: Date.now() } : f
+    ),
+  })),
+  moveToFolder: (conversationId, folderId) => set(s => ({
+    conversations: s.conversations.map(c =>
+      c.id === conversationId ? { ...c, folderId } : c
+    ),
+  })),
 
   // Models
   selectedProvider: 'openai',

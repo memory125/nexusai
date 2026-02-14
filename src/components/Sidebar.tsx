@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { useStore } from '../store';
 import {
   MessageSquare, Bot, Zap, Cpu, Settings, Plus, Trash2,
-  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive, Globe2, Users
+  PanelLeftClose, PanelLeftOpen, LogOut, ChevronRight, ChevronDown, FolderGit2, Database, Plug, Puzzle, Workflow, Globe, HardDrive, Globe2, Users, Folder, MoreVertical, Edit2, FolderPlus
 } from 'lucide-react';
 import type { Page } from '../store';
 
@@ -23,11 +24,42 @@ const navItems: { id: Page; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function Sidebar() {
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [showFolderMenu, setShowFolderMenu] = useState<string | null>(null);
+  const [editingFolder, setEditingFolder] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState('');
+  
   const {
     sidebarOpen, toggleSidebar, currentPage, setCurrentPage,
     conversations, activeConversationId, setActiveConversation,
     createConversation, deleteConversation, user, logout,
+    folders, createFolder, deleteFolder, updateFolder, moveToFolder,
   } = useStore();
+
+  const toggleFolder = (folderId: string) => {
+    setCollapsedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
+  };
+
+  const handleCreateFolder = () => {
+    if (newFolderName.trim()) {
+      createFolder(newFolderName.trim());
+      setNewFolderName('');
+    }
+  };
+
+  const getConversationsInFolder = (folderId: string) => {
+    return conversations.filter(c => c.folderId === folderId);
+  };
+
+  const uncategorizedConvs = conversations.filter(c => !c.folderId);
 
   return (
     <div
@@ -90,36 +122,167 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* Conversations List */}
+        {/* Conversations List with Folders */}
         {sidebarOpen && currentPage === 'chat' && (
           <div className="flex-1 overflow-y-auto px-2 py-2 mt-2" style={{ borderTop: '1px solid var(--t-glass-border)' }}>
-            <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
-              历史对话
+            {/* Folder Header with Create */}
+            <div className="mb-2 flex items-center justify-between px-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                对话文件夹
+              </div>
+              <button
+                onClick={handleCreateFolder}
+                className="p-1 rounded hover:bg-white/10 transition-colors"
+                style={{ color: 'var(--t-text-muted)' }}
+                title="新建文件夹"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+              </button>
             </div>
-            {conversations.length === 0 && (
+
+            {/* New Folder Input */}
+            {newFolderName !== '' && (
+              <div className="mb-2 px-3 flex items-center gap-2">
+                <Folder className="h-3.5 w-3.5" style={{ color: '#6366f1' }} />
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleCreateFolder();
+                    if (e.key === 'Escape') setNewFolderName('');
+                  }}
+                  onBlur={handleCreateFolder}
+                  placeholder="文件夹名称..."
+                  className="flex-1 bg-white/5 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                  style={{ color: 'var(--t-text)' }}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {conversations.length === 0 && folders.length === 0 && (
               <p className="px-3 py-4 text-xs text-center" style={{ color: 'var(--t-text-muted)' }}>暂无对话记录</p>
             )}
-            {conversations.map(conv => (
-              <div
-                key={conv.id}
-                onClick={() => setActiveConversation(conv.id)}
-                className="group flex items-center gap-2 rounded-lg px-3 py-2 text-xs cursor-pointer mb-0.5 transition-all"
-                style={{
-                  background: activeConversationId === conv.id ? 'var(--t-sidebar-active)' : 'transparent',
-                  color: activeConversationId === conv.id ? 'var(--t-text)' : 'var(--t-text-secondary)',
-                }}
-              >
-                <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                <span className="flex-1 truncate">{conv.title}</span>
-                <button
-                  onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}
-                  className="hidden h-5 w-5 items-center justify-center rounded hover:text-red-400 group-hover:flex transition-all"
-                  style={{ color: 'var(--t-text-muted)' }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
+
+            {/* Folders */}
+            {folders.map(folder => {
+              const folderConvs = getConversationsInFolder(folder.id);
+              const isCollapsed = collapsedFolders.has(folder.id);
+              
+              return (
+                <div key={folder.id} className="mb-1">
+                  {/* Folder Header */}
+                  <div
+                    className="group flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs cursor-pointer"
+                    onClick={() => toggleFolder(folder.id)}
+                    style={{ color: 'var(--t-text-secondary)' }}
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <Folder className="h-3.5 w-3.5 shrink-0" style={{ color: folder.color }} />
+                    <span className="flex-1 truncate font-medium">{folder.name}</span>
+                    <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+                      {folderConvs.length}
+                    </span>
+                    <div className="relative">
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setShowFolderMenu(showFolderMenu === folder.id ? null : folder.id);
+                        }}
+                        className="hidden h-5 w-5 items-center justify-center rounded hover:bg-white/10 group-hover:flex transition-all"
+                      >
+                        <MoreVertical className="h-3 w-3" />
+                      </button>
+                      {showFolderMenu === folder.id && (
+                        <div className="absolute right-0 top-full mt-1 w-24 rounded-lg shadow-lg z-10 overflow-hidden" style={{ background: 'var(--t-glass-card)' }}>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              setEditingFolder(folder.id);
+                              setShowFolderMenu(null);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-white/10"
+                            style={{ color: 'var(--t-text)' }}
+                          >
+                            <Edit2 className="h-3 w-3" /> 重命名
+                          </button>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (confirm('确定删除此文件夹？对话将移至未分类。')) {
+                                deleteFolder(folder.id);
+                              }
+                              setShowFolderMenu(null);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-red-500/20 text-red-400"
+                          >
+                            <Trash2 className="h-3 w-3" /> 删除
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Folder Conversations */}
+                  {!isCollapsed && folderConvs.map(conv => (
+                    <div
+                      key={conv.id}
+                      onClick={() => setActiveConversation(conv.id)}
+                      className="group flex items-center gap-2 rounded-lg pl-8 pr-3 py-1.5 text-xs cursor-pointer mb-0.5 transition-all"
+                      style={{
+                        background: activeConversationId === conv.id ? 'var(--t-sidebar-active)' : 'transparent',
+                        color: activeConversationId === conv.id ? 'var(--t-text)' : 'var(--t-text-secondary)',
+                      }}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                      <span className="flex-1 truncate">{conv.title}</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}
+                        className="hidden h-5 w-5 items-center justify-center rounded hover:text-red-400 group-hover:flex transition-all"
+                        style={{ color: 'var(--t-text-muted)' }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+
+            {/* Uncategorized Conversations */}
+            {uncategorizedConvs.length > 0 && (
+              <div className="mt-2">
+                <div className="mb-1 px-3 py-1 text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                  未分类
+                </div>
+                {uncategorizedConvs.map(conv => (
+                  <div
+                    key={conv.id}
+                    onClick={() => setActiveConversation(conv.id)}
+                    className="group flex items-center gap-2 rounded-lg px-3 py-2 text-xs cursor-pointer mb-0.5 transition-all"
+                    style={{
+                      background: activeConversationId === conv.id ? 'var(--t-sidebar-active)' : 'transparent',
+                      color: activeConversationId === conv.id ? 'var(--t-text)' : 'var(--t-text-secondary)',
+                    }}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                    <span className="flex-1 truncate">{conv.title}</span>
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}
+                      className="hidden h-5 w-5 items-center justify-center rounded hover:text-red-400 group-hover:flex transition-all"
+                      style={{ color: 'var(--t-text-muted)' }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
 
