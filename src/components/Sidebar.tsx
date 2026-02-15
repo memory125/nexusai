@@ -90,7 +90,7 @@ export function Sidebar() {
         sidebarOpen ? 'w-72' : 'w-16'
       }`}
     >
-      <div className="glass flex h-full flex-col rounded-2xl m-2 mr-0 overflow-hidden">
+      <div className="glass flex flex-col rounded-2xl m-2 mr-0 overflow-hidden" style={{ height: 'calc(100vh - 16px)' }}>
         {/* Header */}
         <div className="flex items-center justify-between p-3" style={{ borderBottom: '1px solid var(--t-glass-border)' }}>
           {sidebarOpen && (
@@ -125,7 +125,7 @@ export function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="px-2 space-y-0.5">
+        <nav className="px-2 space-y-0.5 overflow-y-auto" style={{ maxHeight: 'calc(50vh - 80px)' }}>
           {navItems.map(item => (
             <button
               key={item.id}
