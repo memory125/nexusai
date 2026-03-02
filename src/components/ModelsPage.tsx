@@ -34,7 +34,6 @@ function VLLMSection() {
           // Auto-select first available model
           setSelectedModel(models[0].id);
           setSelectedProvider('vllm');
-          window.location.reload();
         } else {
           setVllmStatus('error');
         }
@@ -346,7 +345,7 @@ function VLLMSection() {
             return (
               <button
                 key={model.id}
-                onClick={() => { setSelectedProvider('vllm'); setSelectedModel(model.id); window.location.reload(); }}
+                onClick={() => { setSelectedProvider('vllm'); setSelectedModel(model.id); }}
                 className="w-full flex items-center gap-3 rounded-xl p-3.5 text-left transition-all group"
                 style={{
                   background: isSelected ? 'var(--t-accent-subtle)' : 'var(--t-glass-card)',
@@ -489,7 +488,6 @@ function OllamaSection() {
           // Auto-select first available model
           setSelectedModel(modelNames[0]);
           setSelectedProvider('ollama');
-          window.location.reload();
         } else {
           setOllamaStatus('error');
         }
@@ -805,7 +803,7 @@ function OllamaSection() {
             return (
               <button
                 key={model.id}
-                onClick={() => { setSelectedProvider('ollama'); setSelectedModel(model.id); window.location.reload(); }}
+                onClick={() => { setSelectedProvider('ollama'); setSelectedModel(model.id); }}
                 className="w-full flex items-center gap-3 rounded-xl p-3.5 text-left transition-all group"
                 style={{
                   background: isSelected ? 'var(--t-accent-subtle)' : 'var(--t-glass-card)',
