@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Attachment } from './types/multimodal';
 import { getOllamaService } from './services/ollamaService';
 import type { OllamaMessage } from './services/ollamaService';
@@ -441,11 +442,13 @@ const simulatedResponses = {
   ]
 };
 
-// Create the store
-export const useStore = create<AppState>((set, get) => ({
-  // Auth - simplified demo
-  user: null,
-  isLoggedIn: false,
+// Create the store with persist middleware for config
+export const useStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      // Auth - simplified demo
+      user: null,
+      isLoggedIn: false,
   authMode: 'login',
   login: (email, password) => {
     set({ user: { id: '1', username: 'Demo', email, avatar: 'D', createdAt: new Date().toISOString() }, isLoggedIn: true });
@@ -696,4 +699,17 @@ export const useStore = create<AppState>((set, get) => ({
   // Theme
   theme: 'midnight',
   setTheme: (theme) => set({ theme }),
+}), {
+  name: 'nexusai-config',
+  storage: createJSONStorage(() => localStorage),
+  partialize: (state: AppState) => ({
+    selectedProvider: state.selectedProvider,
+    selectedModel: state.selectedModel,
+    ollamaEndpoint: state.ollamaEndpoint,
+    ollamaCustomModel: state.ollamaCustomModel,
+    vllmEndpoint: state.vllmEndpoint,
+    vllmCustomModel: state.vllmCustomModel,
+    apiKeys: state.apiKeys,
+    theme: state.theme,
+  }),
 }));
