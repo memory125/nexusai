@@ -573,16 +573,16 @@ export function PluginPage() {
 
             {selectedPlugin.configSchema && (
               <div className="mb-6">
-                <h4 className="font-medium text-white mb-3">配置选项</h4>
+                <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>配置选项</h4>
                 <div className="space-y-2">
                   {Object.entries(selectedPlugin.configSchema.properties).map(([key, prop]) => (
-                    <div key={key} className="p-3 rounded-lg bg-white/5">
+                    <div key={key} className="p-3 rounded-lg" style={{ background: 'var(--t-glass-input)' }}>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-white">{prop.title || key}</span>
-                        <span className="text-xs text-white/40">{prop.type}</span>
+                        <span className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>{prop.title || key}</span>
+                        <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{prop.type}</span>
                       </div>
                       {prop.description && (
-                        <p className="text-xs text-white/50 mt-1">{prop.description}</p>
+                        <p className="text-xs mt-1" style={{ color: 'var(--t-text-muted)' }}>{prop.description}</p>
                       )}
                     </div>
                   ))}
@@ -597,13 +597,15 @@ export function PluginPage() {
                     onClick={() => {
                       setShowConfigModal(true);
                     }}
-                    className="flex-1 px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all"
+                    className="flex-1 px-4 py-2 rounded-lg transition-all"
+                    style={{ background: 'var(--t-glass-card)', color: 'var(--t-text)' }}
                   >
                     配置
                   </button>
                   <button
                     onClick={() => handleUninstall(selectedPlugin.id)}
-                    className="flex-1 px-4 py-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all"
+                    className="flex-1 px-4 py-2 rounded-lg transition-all"
+                    style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}
                   >
                     卸载
                   </button>
@@ -612,7 +614,8 @@ export function PluginPage() {
                 <button
                   onClick={() => handleInstall(selectedPlugin)}
                   disabled={installing === selectedPlugin.id}
-                  className="flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-all disabled:opacity-50"
+                  className="flex-1 px-4 py-2 rounded-lg transition-all disabled:opacity-50"
+                  style={{ background: 'var(--t-accent)', color: 'white' }}
                 >
                   {installing === selectedPlugin.id ? (
                     <RefreshCw className="h-4 w-4 animate-spin mx-auto" />
@@ -673,20 +676,21 @@ function PluginCard({ plugin, installed, installing, onInstall, onClick, compact
     return (
       <div
         onClick={onClick}
-        className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10 hover:border-white/20 cursor-pointer transition-all"
+        className="flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all"
+        style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}
       >
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-600/20">
-            <Puzzle className="h-4 w-4 text-blue-400" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'var(--t-accent-subtle)' }}>
+            <Puzzle className="h-4 w-4" style={{ color: 'var(--t-accent-light)' }} />
           </div>
           <div>
-            <div className="font-medium text-white text-sm">{plugin.manifest.name}</div>
-            <div className="text-xs text-white/50">{plugin.manifest.author}</div>
+            <div className="font-medium text-sm" style={{ color: 'var(--t-text)' }}>{plugin.manifest.name}</div>
+            <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{plugin.manifest.author}</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {installed ? (
-            <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">
+            <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(34,197,94,0.2)', color: '#4ade80' }}>
               已安装
             </span>
           ) : (
@@ -696,7 +700,8 @@ function PluginCard({ plugin, installed, installing, onInstall, onClick, compact
                 onInstall();
               }}
               disabled={installing}
-              className="px-3 py-1 rounded-lg bg-blue-500 text-white text-xs hover:bg-blue-600 transition-all disabled:opacity-50"
+              className="px-3 py-1 rounded-lg text-xs transition-all disabled:opacity-50"
+              style={{ background: 'var(--t-accent)', color: 'white' }}
             >
               {installing ? <RefreshCw className="h-3 w-3 animate-spin" /> : '安装'}
             </button>
@@ -709,14 +714,15 @@ function PluginCard({ plugin, installed, installing, onInstall, onClick, compact
   return (
     <div
       onClick={onClick}
-      className="group p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 cursor-pointer transition-all"
+      className="group p-4 rounded-xl cursor-pointer transition-all"
+      style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}
     >
       <div className="flex items-start justify-between mb-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-600/20">
-          <Puzzle className="h-6 w-6 text-blue-400" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: 'var(--t-accent-subtle)' }}>
+          <Puzzle className="h-6 w-6" style={{ color: 'var(--t-accent-light)' }} />
         </div>
         {installed ? (
-          <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">
+          <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(34,197,94,0.2)', color: '#4ade80' }}>
             已安装
           </span>
         ) : (
@@ -726,26 +732,27 @@ function PluginCard({ plugin, installed, installing, onInstall, onClick, compact
               onInstall();
             }}
             disabled={installing}
-            className="px-3 py-1.5 rounded-lg bg-blue-500 text-white text-sm hover:bg-blue-600 transition-all disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg text-sm transition-all disabled:opacity-50"
+            style={{ background: 'var(--t-accent)', color: 'white' }}
           >
             {installing ? <RefreshCw className="h-4 w-4 animate-spin" /> : '安装'}
           </button>
         )}
       </div>
-      <h4 className="font-medium text-white mb-1">{plugin.manifest.name}</h4>
-      <p className="text-sm text-white/50 mb-2 line-clamp-2">{plugin.manifest.description}</p>
+      <h4 className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>{plugin.manifest.name}</h4>
+      <p className="text-sm mb-2 line-clamp-2" style={{ color: 'var(--t-text-muted)' }}>{plugin.manifest.description}</p>
       {/* Category Tags */}
       <div className="flex flex-wrap gap-1 mb-3">
         {plugin.manifest.categories.slice(0, 2).map((cat) => (
-          <span key={cat} className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/50">
+          <span key={cat} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--t-glass-input)', color: 'var(--t-text-muted)' }}>
             {cat}
           </span>
         ))}
-        <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/50">
+        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--t-glass-input)', color: 'var(--t-text-muted)' }}>
           v{plugin.manifest.version}
         </span>
       </div>
-      <div className="flex items-center justify-between text-xs text-white/40">
+      <div className="flex items-center justify-between text-xs" style={{ color: 'var(--t-text-muted)' }}>
         <span>{plugin.manifest.author}</span>
         <div className="flex items-center gap-2">
           <span>⭐ {plugin.rating.toFixed(1)}</span>
