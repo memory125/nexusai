@@ -34,6 +34,7 @@ function VLLMSection() {
           // Auto-select first available model
           setSelectedModel(models[0].id);
           setSelectedProvider('vllm');
+          window.location.reload();
         } else {
           setVllmStatus('error');
         }
@@ -345,7 +346,7 @@ function VLLMSection() {
             return (
               <button
                 key={model.id}
-                onClick={() => { setSelectedProvider('vllm'); setSelectedModel(model.id); }}
+                onClick={() => { setSelectedProvider('vllm'); setSelectedModel(model.id); window.location.reload(); }}
                 className="w-full flex items-center gap-3 rounded-xl p-3.5 text-left transition-all group"
                 style={{
                   background: isSelected ? 'var(--t-accent-subtle)' : 'var(--t-glass-card)',
@@ -488,6 +489,7 @@ function OllamaSection() {
           // Auto-select first available model
           setSelectedModel(modelNames[0]);
           setSelectedProvider('ollama');
+          window.location.reload();
         } else {
           setOllamaStatus('error');
         }
@@ -803,7 +805,7 @@ function OllamaSection() {
             return (
               <button
                 key={model.id}
-                onClick={() => { setSelectedProvider('ollama'); setSelectedModel(model.id); }}
+                onClick={() => { setSelectedProvider('ollama'); setSelectedModel(model.id); window.location.reload(); }}
                 className="w-full flex items-center gap-3 rounded-xl p-3.5 text-left transition-all group"
                 style={{
                   background: isSelected ? 'var(--t-accent-subtle)' : 'var(--t-glass-card)',
@@ -903,7 +905,7 @@ function OllamaSection() {
 }
 
 export function ModelsPage() {
-  const { selectedProvider, selectedModel, setSelectedProvider, setSelectedModel, apiKeys, setApiKey, setCurrentPage } = useStore();
+  const { selectedProvider, selectedModel, setSelectedProvider, setSelectedModel, apiKeys, setApiKey } = useStore();
   const [expandedProvider, setExpandedProvider] = useState<string | null>(selectedProvider);
 
   // Filter out ollama from the regular providers list since it has its own section
@@ -1039,7 +1041,7 @@ export function ModelsPage() {
                         return (
                           <button
                             key={model.id}
-                            onClick={() => { setSelectedProvider(provider.id); setSelectedModel(model.id); setCurrentPage('chat'); }}
+                            onClick={() => { setSelectedProvider(provider.id); setSelectedModel(model.id); window.location.reload(); }}
                             className="w-full flex items-center gap-4 rounded-xl p-4 text-left transition-all"
                             style={{
                               background: isSelected ? 'var(--t-accent-subtle)' : 'var(--t-glass-card)',
