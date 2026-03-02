@@ -257,22 +257,24 @@ export function MCPPage() {
         </button>
         <button
           onClick={() => setActiveTab('tools')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'tools'
-              ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all`}
+          style={{
+            background: activeTab === 'tools' ? 'var(--t-accent-subtle)' : 'transparent',
+            color: activeTab === 'tools' ? 'var(--t-accent-light)' : 'var(--t-text-muted)',
+            border: `1px solid ${activeTab === 'tools' ? 'var(--t-accent-border)' : 'transparent'}`
+          }}
         >
           <Wrench className="h-4 w-4" />
           工具权限
         </button>
         <button
           onClick={() => setActiveTab('settings')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            activeTab === 'settings'
-              ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all`}
+          style={{
+            background: activeTab === 'settings' ? 'var(--t-accent-subtle)' : 'transparent',
+            color: activeTab === 'settings' ? 'var(--t-accent-light)' : 'var(--t-text-muted)',
+            border: `1px solid ${activeTab === 'settings' ? 'var(--t-accent-border)' : 'transparent'}`
+          }}
         >
           <Settings className="h-4 w-4" />
           设置
@@ -286,19 +288,21 @@ export function MCPPage() {
             {/* Search and Filter */}
             <div className="flex gap-3 items-center">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--t-text-muted)' }} />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="搜索服务器..."
-                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg focus:outline-none"
+                  style={{ background: 'var(--t-glass-card)', color: 'var(--t-text)', border: '1px solid var(--t-glass-border)' }}
                 />
               </div>
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-violet-500/50"
+                className="px-4 py-2 rounded-lg focus:outline-none"
+                style={{ background: 'var(--t-glass-card)', color: 'var(--t-text)', border: '1px solid var(--t-glass-border)' }}
               >
                 {categories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -309,7 +313,8 @@ export function MCPPage() {
             {/* Add Server Button */}
             <button
               onClick={() => setShowAddModal(true)}
-              className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-white/10 text-white/40 hover:text-white hover:border-white/20 transition-all"
+              className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all"
+              style={{ borderColor: 'var(--t-glass-border)', color: 'var(--t-text-muted)' }}
             >
               <Plus className="h-5 w-5" />
               <span>添加 MCP 服务器</span>
@@ -317,15 +322,16 @@ export function MCPPage() {
 
             {/* Server List */}
             {filteredServers.length === 0 ? (
-              <div className="text-center py-12 text-white/40">
-                <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <div className="text-center py-12" style={{ color: 'var(--t-text-muted)' }}>
+                <Server className="w-12 h-12 mx-auto mb-4 opacity-50" style={{ color: 'var(--t-text-muted)' }} />
                 <p>没有找到匹配的服务器</p>
                 <button
                   onClick={() => {
                     setSearchQuery('');
                     setSelectedCategory('全部');
                   }}
-                  className="mt-2 text-violet-400 hover:text-violet-300"
+                  className="mt-2"
+                  style={{ color: 'var(--t-accent-light)' }}
                 >
                   清除筛选
                 </button>
@@ -337,18 +343,23 @@ export function MCPPage() {
                 return (
                 <div
                   key={server.id}
-                  className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden"
+                  className="rounded-xl overflow-hidden"
+                  style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}
                 >
                   <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div
                         className={`flex h-10 w-10 items-center justify-center rounded-lg ${
                           status?.connected
-                            ? 'bg-green-500/20 text-green-400'
+                            ? ''
                             : server.enabled
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-white/5 text-white/40'
+                            ? ''
+                            : ''
                         }`}
+                        style={{
+                          background: status?.connected ? 'rgba(34,197,94,0.2)' : server.enabled ? 'rgba(234,179,8,0.2)' : 'var(--t-glass-input)',
+                          color: status?.connected ? '#4ade80' : server.enabled ? '#eab308' : 'var(--t-text-muted)'
+                        }}
                       >
                         {status?.connected ? (
                           <Power className="h-5 w-5" />
@@ -357,11 +368,11 @@ export function MCPPage() {
                         )}
                       </div>
                       <div>
-                        <h3 className="font-medium text-white">{server.name}</h3>
-                        <p className="text-xs text-white/50">{server.description}</p>
+                        <h3 className="font-medium" style={{ color: 'var(--t-text)' }}>{server.name}</h3>
+                        <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{server.description}</p>
                         <div className="flex items-center gap-2 mt-1">
                           {status?.connected && (
-                            <span className="text-xs text-green-400">
+                            <span className="text-xs" style={{ color: '#4ade80' }}>
                               {status.tools?.length || 0} 个工具
                             </span>
                           )}
@@ -397,21 +408,22 @@ export function MCPPage() {
                       )}
                       <button
                         onClick={() => toggleExpand(server.id)}
-                        className="p-2 rounded-lg hover:bg-white/10 transition-all"
+                        className="p-2 rounded-lg transition-all"
+                        style={{ color: 'var(--t-text-muted)' }}
                       >
                         {isExpanded ? (
-                          <ChevronUp className="h-4 w-4 text-white/60" />
+                          <ChevronUp className="h-4 w-4" />
                         ) : (
-                          <ChevronDown className="h-4 w-4 text-white/60" />
+                          <ChevronDown className="h-4 w-4" />
                         )}
                       </button>
                       <button
                         onClick={() => toggleServer(server.id)}
-                        className={`p-2 rounded-lg transition-all ${
-                          server.enabled
-                            ? 'bg-green-500/10 text-green-400'
-                            : 'bg-white/5 text-white/40'
-                        }`}
+                        className={`p-2 rounded-lg transition-all`}
+                        style={{
+                          background: server.enabled ? 'rgba(34,197,94,0.1)' : 'var(--t-glass-input)',
+                          color: server.enabled ? '#4ade80' : 'var(--t-text-muted)'
+                        }}
                       >
                         {server.enabled ? (
                           <Check className="h-4 w-4" />
@@ -424,23 +436,24 @@ export function MCPPage() {
 
                   {/* Expanded Details */}
                   {isExpanded && status?.tools && (
-                    <div className="border-t border-white/10 p-4">
-                      <h4 className="text-sm font-medium text-white/80 mb-3">可用工具</h4>
+                    <div className="border-t p-4" style={{ borderColor: 'var(--t-glass-border)' }}>
+                      <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--t-text-secondary)' }}>可用工具</h4>
                       <div className="space-y-2">
                         {status.tools.map((tool) => (
                           <div
                             key={tool.name}
-                            className="p-3 rounded-lg bg-white/5 text-sm"
+                            className="p-3 rounded-lg text-sm"
+                            style={{ background: 'var(--t-glass-input)' }}
                           >
                             <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-white">{tool.name}</span>
+                              <span className="font-medium" style={{ color: 'var(--t-text)' }}>{tool.name}</span>
                               {getPermissionBadge(
                                 toolPermissions.find(
                                   (p) => p.toolName === tool.name && p.serverId === server.id
                                 )?.permission || 'ask'
                               )}
                             </div>
-                            <p className="text-xs text-white/50">{tool.description}</p>
+                            <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{tool.description}</p>
                           </div>
                         ))}
                       </div>
@@ -455,24 +468,26 @@ export function MCPPage() {
 
         {activeTab === 'tools' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="flex items-center justify-between p-4 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
               <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-violet-400" />
+                <Shield className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
                 <div>
-                  <h3 className="font-medium text-white">全局自动批准</h3>
-                  <p className="text-xs text-white/50">自动执行所有工具调用，不询问确认</p>
+                  <h3 className="font-medium" style={{ color: 'var(--t-text)' }}>全局自动批准</h3>
+                  <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>自动执行所有工具调用，不询问确认</p>
                 </div>
               </div>
               <button
                 onClick={() => setGlobalAutoApprove(!globalAutoApprove)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  globalAutoApprove ? 'bg-violet-500' : 'bg-white/20'
+                  globalAutoApprove ? '' : ''
                 }`}
+                style={{ background: globalAutoApprove ? 'var(--t-accent)' : 'var(--t-glass-input)' }}
               >
                 <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  className={`inline-block h-4 w-4 transform rounded-full transition-transform ${
                     globalAutoApprove ? 'translate-x-6' : 'translate-x-1'
                   }`}
+                  style={{ background: 'white' }}
                 />
               </button>
             </div>
@@ -487,16 +502,17 @@ export function MCPPage() {
                 return (
                   <div
                     key={`${tool.serverId}-${tool.name}`}
-                    className="p-4 rounded-xl bg-white/5 border border-white/10"
+                    className="p-4 rounded-xl"
+                    style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}
                   >
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-2">
-                          <Wrench className="h-4 w-4 text-white/40" />
-                          <span className="font-medium text-white">{tool.name}</span>
-                          <span className="text-xs text-white/40">({tool.serverId})</span>
+                          <Wrench className="h-4 w-4" style={{ color: 'var(--t-text-muted)' }} />
+                          <span className="font-medium" style={{ color: 'var(--t-text)' }}>{tool.name}</span>
+                          <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>({tool.serverId})</span>
                         </div>
-                        <p className="text-sm text-white/60 mt-1">{tool.description}</p>
+                        <p className="text-sm mt-1" style={{ color: 'var(--t-text-secondary)' }}>{tool.description}</p>
                       </div>
                       <div className="flex items-center gap-1">
                         {(['ask', 'allow', 'deny'] as ToolPermission[]).map((p) => (
@@ -527,38 +543,39 @@ export function MCPPage() {
 
         {activeTab === 'settings' && (
           <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-              <h3 className="font-medium text-white mb-4">关于 MCP</h3>
-              <p className="text-sm text-white/60 leading-relaxed">
+            <div className="p-4 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
+              <h3 className="font-medium mb-4" style={{ color: 'var(--t-text)' }}>关于 MCP</h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--t-text-secondary)' }}>
                 Model Context Protocol (MCP) 是 Anthropic 推出的开放协议，
                 允许 AI 助手通过标准化的方式连接到外部数据源和工具。
               </p>
               <div className="mt-4 space-y-2">
-                <div className="flex items-center gap-2 text-sm text-white/60">
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--t-text-secondary)' }}>
                   <Terminal className="h-4 w-4" />
                   <span>支持 stdio、HTTP、WebSocket 传输</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-white/60">
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--t-text-secondary)' }}>
                   <Globe className="h-4 w-4" />
                   <span>内置 {BUILTIN_MCP_SERVERS.length} 个 MCP 服务器</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-white/60">
+                <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--t-text-secondary)' }}>
                   <Lock className="h-4 w-4" />
                   <span>细粒度的工具权限控制</span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-              <h3 className="font-medium text-white mb-4">内置服务器</h3>
+            <div className="p-4 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
+              <h3 className="font-medium mb-4" style={{ color: 'var(--t-text)' }}>内置服务器</h3>
               <div className="grid grid-cols-2 gap-3">
                 {BUILTIN_MCP_SERVERS.map((server) => (
                   <div
                     key={server.id}
-                    className="p-3 rounded-lg bg-white/5 text-sm"
+                    className="p-3 rounded-lg text-sm"
+                    style={{ background: 'var(--t-glass-input)' }}
                   >
-                    <div className="font-medium text-white">{server.name}</div>
-                    <div className="text-xs text-white/50 mt-1">
+                    <div className="font-medium" style={{ color: 'var(--t-text)' }}>{server.name}</div>
+                    <div className="text-xs mt-1" style={{ color: 'var(--t-text-muted)' }}>
                       {server.description}
                     </div>
                   </div>
