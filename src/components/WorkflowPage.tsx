@@ -75,14 +75,14 @@ export function WorkflowPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/10">
+      <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--t-glass-border)' }}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <Workflow className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--t-accent-subtle)' }}>
+            <Workflow className="w-5 h-5" style={{ color: 'var(--t-accent-light)' }} />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">工作流编排</h1>
-            <p className="text-sm text-gray-400">创建和运行自动化工作流</p>
+            <h1 className="text-xl font-semibold" style={{ color: 'var(--t-text)' }}>工作流编排</h1>
+            <p className="text-sm" style={{ color: 'var(--t-text-muted)' }}>创建和运行自动化工作流</p>
           </div>
         </div>
           <button

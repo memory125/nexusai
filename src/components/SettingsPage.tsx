@@ -125,7 +125,7 @@ function ThemeCard({ themeId, name, description, preview, isActive, onClick }: {
               className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full"
               style={{ background: preview.accent }}
             >
-              <Check className="h-3 w-3 text-white" />
+              <Check className="h-3 w-3" style={{ color: 'white' }} />
             </div>
           )}
         </div>

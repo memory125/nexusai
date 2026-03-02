@@ -99,7 +99,7 @@ export function Sidebar() {
                 className="flex h-8 w-8 items-center justify-center rounded-lg"
                 style={{ background: `linear-gradient(135deg, var(--t-gradient-from), var(--t-gradient-to))` }}
               >
-                <Zap className="h-4 w-4 text-white" />
+                <Zap className="h-4 w-4" style={{ color: 'white' }} />
               </div>
               <span className="font-bold text-sm" style={{ color: 'var(--t-text)' }}>NexusAI</span>
             </div>
