@@ -210,12 +210,12 @@ export function MCPPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-600/20 border border-violet-500/20">
-            <Plug className="h-5 w-5 text-violet-400" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--t-accent-subtle)', border: '1px solid var(--t-accent-border)' }}>
+            <Plug className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">MCP 工具服务</h2>
-            <p className="text-xs text-white/60">
+            <h2 className="text-lg font-bold" style={{ color: 'var(--t-text)' }}>MCP 工具服务</h2>
+            <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
               Model Context Protocol - 连接外部工具和 API
             </p>
           </div>
@@ -223,16 +223,17 @@ export function MCPPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBuiltinModal(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30 transition-all"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+            style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-light)', border: '1px solid var(--t-accent-border)' }}
           >
             <Zap className="h-4 w-4" />
             快速添加
           </button>
-          <span className="text-sm text-white/60">
+          <span className="text-sm" style={{ color: 'var(--t-text-muted)' }}>
             {connectedServers.length} 个已连接
           </span>
-          <span className="text-sm text-white/60">|</span>
-          <span className="text-sm text-white/60">{allTools.length} 个工具</span>
+          <span className="text-sm" style={{ color: 'var(--t-text-muted)' }}>|</span>
+          <span className="text-sm" style={{ color: 'var(--t-text-muted)' }}>{allTools.length} 个工具</span>
         </div>
       </div>
 
@@ -242,9 +243,14 @@ export function MCPPage() {
           onClick={() => setActiveTab('servers')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'servers'
-              ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
+              ? ''
+              : ''
           }`}
+          style={{
+            background: activeTab === 'servers' ? 'var(--t-accent-subtle)' : 'transparent',
+            color: activeTab === 'servers' ? 'var(--t-accent-light)' : 'var(--t-text-muted)',
+            border: `1px solid ${activeTab === 'servers' ? 'var(--t-accent-border)' : 'transparent'}`
+          }}
         >
           <Server className="h-4 w-4" />
           服务器

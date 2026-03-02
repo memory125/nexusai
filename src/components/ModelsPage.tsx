@@ -55,7 +55,7 @@ function VLLMSection() {
 
   const statusConfig = {
     idle: { color: 'var(--t-text-muted)', bg: 'var(--t-glass-card)', text: '未连接', icon: <WifiOff className="h-3 w-3" /> },
-    connecting: { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)', text: '连接中...', icon: <RefreshCw className="h-3 w-3 animate-spin" /> },
+    connecting: { color: 'var(--t-accent)', bg: 'var(--t-accent-subtle)', text: '连接中...', icon: <RefreshCw className="h-3 w-3 animate-spin" /> },
     connected: { color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', text: '已连接', icon: <Wifi className="h-3 w-3" /> },
     error: { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', text: '连接失败', icon: <WifiOff className="h-3 w-3" /> },
   };
@@ -509,7 +509,7 @@ function OllamaSection() {
 
   const statusConfig = {
     idle: { color: 'var(--t-text-muted)', bg: 'var(--t-glass-card)', text: '未连接', icon: <WifiOff className="h-3 w-3" /> },
-    connecting: { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)', text: '连接中...', icon: <RefreshCw className="h-3 w-3 animate-spin" /> },
+    connecting: { color: 'var(--t-accent)', bg: 'var(--t-accent-subtle)', text: '连接中...', icon: <RefreshCw className="h-3 w-3 animate-spin" /> },
     connected: { color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', text: '已连接', icon: <Wifi className="h-3 w-3" /> },
     error: { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', text: '连接失败', icon: <WifiOff className="h-3 w-3" /> },
   };
