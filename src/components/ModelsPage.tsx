@@ -903,7 +903,7 @@ function OllamaSection() {
 }
 
 export function ModelsPage() {
-  const { selectedProvider, selectedModel, setSelectedProvider, setSelectedModel, apiKeys, setApiKey } = useStore();
+  const { selectedProvider, selectedModel, setSelectedProvider, setSelectedModel, apiKeys, setApiKey, setCurrentPage } = useStore();
   const [expandedProvider, setExpandedProvider] = useState<string | null>(selectedProvider);
 
   // Filter out ollama from the regular providers list since it has its own section
@@ -1039,7 +1039,7 @@ export function ModelsPage() {
                         return (
                           <button
                             key={model.id}
-                            onClick={() => { setSelectedProvider(provider.id); setSelectedModel(model.id); }}
+                            onClick={() => { setSelectedProvider(provider.id); setSelectedModel(model.id); setCurrentPage('chat'); }}
                             className="w-full flex items-center gap-4 rounded-xl p-4 text-left transition-all"
                             style={{
                               background: isSelected ? 'var(--t-accent-subtle)' : 'var(--t-glass-card)',
