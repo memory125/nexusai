@@ -275,6 +275,75 @@ const defaultAgents: Agent[] = [
   // 法律类
   { id: 'lawyer', name: '律师', description: '法律咨询', icon: '⚖️', systemPrompt: '你是一个专业律师', skills: ['legal'], category: '法律', color: '#1e293b' },
   { id: 'legal-consultant', name: '法律顾问', description: '企业法务', icon: '📜', systemPrompt: '你是一个专业法律顾问', skills: ['legal-consulting'], category: '法律', color: '#475569' },
+  
+  // 生活服务类
+  { id: 'life-assistant', name: '生活助手', description: '日常生活问题', icon: '🏠', systemPrompt: '你是一个贴心生活助手', skills: ['life'], category: '生活', color: '#10b981' },
+  { id: 'chef', name: '厨师', description: '美食烹饪专家', icon: '👨‍🍳', systemPrompt: '你是一个专业厨师', skills: ['cooking'], category: '生活', color: '#f59e0b' },
+  { id: 'travel-planner', name: '旅行规划师', description: '行程安排专家', icon: '✈️', systemPrompt: '你是一个专业旅行规划师', skills: ['travel'], category: '生活', color: '#06b6d4' },
+  { id: 'pet-consultant', name: '宠物顾问', description: '宠物养护专家', icon: '🐕', systemPrompt: '你是一个专业宠物顾问', skills: ['pet'], category: '生活', color: '#8b5cf6' },
+  { id: 'stylist', name: '造型师', description: '穿搭建议', icon: '👔', systemPrompt: '你是一个专业造型师', skills: ['fashion'], category: '生活', color: '#ec4899' },
+  { id: 'home-designer', name: '家居设计师', description: '室内设计建议', icon: '🏡', systemPrompt: '你是一个专业家居设计师', skills: ['home-design'], category: '生活', color: '#14b8a6' },
+  
+  // 科研学术类
+  { id: 'research-assistant', name: '论文助手', description: '学术论文撰写', icon: '📄', systemPrompt: '你是一个专业学术论文助手', skills: ['research'], category: '学术', color: '#6366f1' },
+  { id: 'math-tutor', name: '数学老师', description: '数学辅导专家', icon: '🔢', systemPrompt: '你是一个专业数学老师', skills: ['math'], category: '学术', color: '#3b82f6' },
+  { id: 'physics-tutor', name: '物理老师', description: '物理辅导专家', icon: '⚛️', systemPrompt: '你是一个专业物理老师', skills: ['physics'], category: '学术', color: '#06b6d4' },
+  { id: 'chemistry-tutor', name: '化学老师', description: '化学辅导专家', icon: '🧪', systemPrompt: '你是一个专业化学老师', skills: ['chemistry'], category: '学术', color: '#22c55e' },
+  { id: 'programming-tutor', name: '编程教练', description: '编程学习辅导', icon: '⌨️', systemPrompt: '你是一个专业编程教练', skills: ['programming'], category: '学术', color: '#f97316' },
+  { id: 'thesis-reviewer', name: '论文审稿人', description: '论文评审修改', icon: '📝', systemPrompt: '你是一个专业论文审稿人', skills: ['thesis'], category: '学术', color: '#8b5cf6' },
+  
+  // 职场办公类
+  { id: 'interviewer', name: '面试官', description: '面试准备指导', icon: '👔', systemPrompt: '你是一个专业面试官', skills: ['interview'], category: '职场', color: '#1e293b' },
+  { id: 'ppt-expert', name: 'PPT制作', description: '演示文稿设计', icon: '📊', systemPrompt: '你是一个专业PPT制作专家', skills: ['ppt'], category: '职场', color: '#f59e0b' },
+  { id: 'email-writer', name: '邮件助手', description: '商务邮件撰写', icon: '✉️', systemPrompt: '你是一个专业邮件助手', skills: ['email'], category: '职场', color: '#3b82f6' },
+  { id: 'meeting-secretary', name: '会议纪要', description: '会议记录整理', icon: '📋', systemPrompt: '你是一个专业会议纪要助手', skills: ['meeting'], category: '职场', color: '#22c55e' },
+  { id: 'resume-expert', name: '简历优化', description: '简历修改指导', icon: '📄', systemPrompt: '你是一个专业简历优化专家', skills: ['resume'], category: '职场', color: '#ec4899' },
+  { id: 'project-manager', name: '项目经理', description: '项目管理专家', icon: '📁', systemPrompt: '你是一个专业项目经理', skills: ['pm'], category: '职场', color: '#14b8a6' },
+  { id: 'hr-consultant', name: 'HR顾问', description: '人力资源咨询', icon: '👥', systemPrompt: '你是一个专业HR顾问', skills: ['hr'], category: '职场', color: '#8b5cf6' },
+  
+  // IT运维类
+  { id: 'sysadmin', name: '系统管理员', description: '系统运维管理', icon: '🖥️', systemPrompt: '你是一个专业系统管理员', skills: ['sysadmin'], category: 'IT运维', color: '#6366f1' },
+  { id: 'network-engineer', name: '网络工程师', description: '网络架构设计', icon: '🌐', systemPrompt: '你是一个专业网络工程师', skills: ['network'], category: 'IT运维', color: '#06b6d4' },
+  { id: 'dba', name: '数据库管理员', description: 'DBA专家', icon: '🗄️', systemPrompt: '你是一个专业数据库管理员', skills: ['dba'], category: 'IT运维', color: '#f97316' },
+  { id: 'sre', name: 'SRE工程师', description: '站点可靠性工程', icon: '🔧', systemPrompt: '你是一个专业SRE工程师', skills: ['sre'], category: 'IT运维', color: '#22c55e' },
+  { id: 'cloud-architect', name: '云架构师', description: '云计算架构', icon: '☁️', systemPrompt: '你是一个专业云架构师', skills: ['cloud'], category: 'IT运维', color: '#3b82f6' },
+  
+  // 电商运营类
+  { id: 'amazon-seller', name: '亚马逊运营', description: '亚马逊店铺运营', icon: '📦', systemPrompt: '你是一个专业亚马逊运营专家', skills: ['amazon'], category: '电商', color: '#f59e0b' },
+  { id: 'shopify-expert', name: 'Shopify专家', description: 'Shopify建站运营', icon: '🛒', systemPrompt: '你是一个专业Shopify专家', skills: ['shopify'], category: '电商', color: '#22c55e' },
+  { id: 'ecommerce-copywriter', name: '电商文案', description: '产品描述撰写', icon: '📝', systemPrompt: '你是一个专业电商文案专家', skills: ['ecommerce'], category: '电商', color: '#ec4899' },
+  { id: 'ads-specialist', name: '广告投放师', description: '广告优化投放', icon: '📢', systemPrompt: '你是一个专业广告投放师', skills: ['ads'], category: '电商', color: '#f97316' },
+  
+  // 创作艺术类
+  { id: 'music-composer', name: '音乐创作', description: '歌曲创作专家', icon: '🎵', systemPrompt: '你是一个专业音乐创作人', skills: ['music'], category: '艺术', color: '#8b5cf6' },
+  { id: 'video-editor', name: '视频剪辑', description: '视频后期制作', icon: '🎬', systemPrompt: '你是一个专业视频剪辑师', skills: ['video'], category: '艺术', color: '#ec4899' },
+  { id: 'photography-tutor', name: '摄影指导', description: '摄影技巧教学', icon: '📷', systemPrompt: '你是一个专业摄影指导', skills: ['photo'], category: '艺术', color: '#14b8a6' },
+  { id: 'podcast-host', name: '播客主持', description: '播客内容策划', icon: '🎙️', systemPrompt: '你是一个专业播客主持', skills: ['podcast'], category: '艺术', color: '#f97316' },
+  
+  // 金融科技类
+  { id: 'crypto-advisor', name: '区块链顾问', description: '加密货币分析', icon: '💎', systemPrompt: '你是一个专业区块链顾问', skills: ['crypto'], category: '金融科技', color: '#f59e0b' },
+  { id: 'risk-control', name: '风控专家', description: '风险控制分析', icon: '🛡️', systemPrompt: '你是一个专业风控专家', skills: ['risk'], category: '金融科技', color: '#ef4444' },
+  { id: 'data-scientist', name: '数据科学家', description: '数据分析建模', icon: '📊', systemPrompt: '你是一个专业数据科学家', skills: ['data-science'], category: '金融科技', color: '#6366f1' },
+  { id: 'quant-analyst', name: '量化分析师', description: '量化投资策略', icon: '📈', systemPrompt: '你是一个专业量化分析师', skills: ['quant'], category: '金融科技', color: '#22c55e' },
+  
+  // 餐饮服务类
+  { id: 'barista', name: '咖啡师', description: '咖啡制作专家', icon: '☕', systemPrompt: '你是一个专业咖啡师', skills: ['coffee'], category: '餐饮', color: '#8b5cf6' },
+  { id: 'bartender', name: '调酒师', description: '鸡尾酒调制', icon: '🍸', systemPrompt: '你是一个专业调酒师', skills: ['bartending'], category: '餐饮', color: '#ec4899' },
+  { id: 'restaurant-manager', name: '餐厅管理', description: '餐饮运营管理', icon: '🍽️', systemPrompt: '你是一个专业餐厅管理者', skills: ['restaurant'], category: '餐饮', color: '#f59e0b' },
+  
+  // 房产类
+  { id: 'real-estate-agent', name: '房产顾问', description: '房产买卖咨询', icon: '🏠', systemPrompt: '你是一个专业房产顾问', skills: ['real-estate'], category: '房产', color: '#14b8a6' },
+  { id: 'interior-designer', name: '室内设计师', description: '室内装修设计', icon: '🎨', systemPrompt: '你是一个专业室内设计师', skills: ['interior'], category: '房产', color: '#f97316' },
+  
+  // 汽车类
+  { id: 'car-consultant', name: '汽车顾问', description: '购车咨询服务', icon: '🚗', systemPrompt: '你是一个专业汽车顾问', skills: ['car'], category: '汽车', color: '#3b82f6' },
+  { id: 'mechanic', name: '汽车维修', description: '车辆维修指导', icon: '🔧', systemPrompt: '你是一个专业汽车维修师傅', skills: ['mechanic'], category: '汽车', color: '#ef4444' },
+  
+  // 其他专业类
+  { id: 'architect', name: '建筑师', description: '建筑设计咨询', icon: '🏗️', systemPrompt: '你是一个专业建筑师', skills: ['architecture'], category: '建筑', color: '#6366f1' },
+  { id: 'civil-engineer', name: '土木工程师', description: '土木工程咨询', icon: '🧱', systemPrompt: '你是一个专业土木工程师', skills: ['civil'], category: '建筑', color: '#f59e0b' },
+  { id: 'journalist', name: '记者', description: '新闻写作采访', icon: '📰', systemPrompt: '你是一个专业记者', skills: ['journalism'], category: '媒体', color: '#1e293b' },
+  { id: 'pr-specialist', name: '公关专家', description: '公共关系处理', icon: '🎯', systemPrompt: '你是一个专业公关专家', skills: ['pr'], category: '媒体', color: '#8b5cf6' },
 ];
 
 // Default skills (100+)
