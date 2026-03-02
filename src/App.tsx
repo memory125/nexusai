@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useStore } from './store';
 import { AuthPage } from './components/AuthPage';
 import { Sidebar } from './components/Sidebar';
@@ -16,13 +16,13 @@ import { IntelligentSearchPage } from './components/IntelligentSearchPage';
 import { DataManagementPage } from './components/DataManagementPage';
 import { BrowserAutomationPage } from './components/BrowserAutomationPage';
 import { TeamCollaborationPage } from './components/TeamCollaborationPage';
+import { SuspenseFallback } from './components/LoadingSpinner';
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { theme } = useStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    // Add transition class briefly
     document.documentElement.classList.add('theme-transition');
     const timer = setTimeout(() => {
       document.documentElement.classList.remove('theme-transition');
@@ -36,7 +36,6 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
 function GlowOrbs() {
   const { theme } = useStore();
 
-  // Get orb colors from CSS custom properties or use theme-based defaults
   const getOrbStyle = (index: number): React.CSSProperties => {
     const orbConfigs = [
       { width: 600, height: 600, top: '-15%', left: '-10%', delay: '0s' },
@@ -57,7 +56,6 @@ function GlowOrbs() {
     } as React.CSSProperties;
   };
 
-  // Force re-render on theme change
   return (
     <div key={theme}>
       {[0, 1, 2, 3].map(i => (
@@ -72,21 +70,36 @@ function MainLayout() {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'chat': return <ChatPage key={currentPage} />;
-      case 'agents': return <AgentsPage key={currentPage} />;
-      case 'skills': return <SkillsPage key={currentPage} />;
-      case 'knowledge': return <KnowledgeBasePage key={currentPage} />;
-      case 'models': return <ModelsPage key={currentPage} />;
-      case 'project': return <ProjectPage key={currentPage} />;
-      case 'mcp': return <MCPPage key={currentPage} />;
-      case 'plugins': return <PluginPage key={currentPage} />;
-      case 'workflow': return <WorkflowPage key={currentPage} />;
-      case 'search': return <IntelligentSearchPage key={currentPage} />;
-      case 'data-management': return <DataManagementPage key={currentPage} />;
-      case 'browser': return <BrowserAutomationPage key={currentPage} />;
-      case 'team': return <TeamCollaborationPage key={currentPage} />;
-      case 'settings': return <SettingsPage key={currentPage} />;
-      default: return <ChatPage key={currentPage} />;
+      case 'chat':
+        return <ChatPage />;
+      case 'agents':
+        return <AgentsPage />;
+      case 'skills':
+        return <SkillsPage />;
+      case 'knowledge':
+        return <KnowledgeBasePage />;
+      case 'models':
+        return <ModelsPage />;
+      case 'project':
+        return <ProjectPage />;
+      case 'mcp':
+        return <MCPPage />;
+      case 'plugins':
+        return <PluginPage />;
+      case 'workflow':
+        return <WorkflowPage />;
+      case 'search':
+        return <IntelligentSearchPage />;
+      case 'data-management':
+        return <DataManagementPage />;
+      case 'browser':
+        return <BrowserAutomationPage />;
+      case 'team':
+        return <TeamCollaborationPage />;
+      case 'settings':
+        return <SettingsPage />;
+      default:
+        return <ChatPage />;
     }
   };
 
@@ -96,7 +109,9 @@ function MainLayout() {
       <Sidebar />
       <div className="relative z-10 flex-1 m-2 ml-2">
         <div className="glass h-full rounded-2xl overflow-hidden">
-          {renderPage()}
+          <Suspense fallback={<SuspenseFallback />}>
+            {renderPage()}
+          </Suspense>
         </div>
       </div>
     </div>

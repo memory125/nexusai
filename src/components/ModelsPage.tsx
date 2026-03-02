@@ -10,20 +10,40 @@ function VLLMSection() {
     vllmCustomModel, setVllmCustomModel, apiKeys, setApiKey,
   } = useStore();
 
-  const provider = modelProviders.find(p => p.id === 'vllm')!;
+  const provider = modelProviders?.find(p => p.id === 'vllm');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [showAllModels, setShowAllModels] = useState(false);
 
   const isCurrentProvider = selectedProvider === 'vllm';
-  const displayedModels = showAllModels ? provider.models : provider.models.slice(0, 6);
+  const displayedModels = provider?.models ? (showAllModels ? provider.models : provider.models.slice(0, 6)) : [];
 
-  const testConnection = () => {
+  const testConnection = async () => {
     setVllmStatus('connecting');
-    // Simulate connection test
-    setTimeout(() => {
-      const success = Math.random() > 0.3;
-      setVllmStatus(success ? 'connected' : 'error');
-    }, 1500);
+    try {
+      const response = await fetch(`${vllmEndpoint}/v1/models`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const models = data.data || [];
+        
+        if (models.length > 0) {
+          setVllmStatus('connected');
+          // Auto-select first available model
+          setSelectedModel(models[0].id);
+          setSelectedProvider('vllm');
+        } else {
+          setVllmStatus('error');
+        }
+      } else {
+        setVllmStatus('error');
+      }
+    } catch (error) {
+      console.error('vLLM connection error:', error);
+      setVllmStatus('error');
+    }
   };
 
   const addCustomModel = () => {
@@ -45,7 +65,7 @@ function VLLMSection() {
   return (
     <div
       className="glass-card rounded-2xl overflow-hidden animate-fade-in"
-      style={{ animationDelay: `${modelProviders.length * 60}ms` }}
+      style={{ animationDelay: `${(modelProviders?.length || 0) * 60}ms` }}
     >
       {/* vLLM Header */}
       <div className="relative overflow-hidden">
@@ -268,7 +288,7 @@ function VLLMSection() {
                 可用模型
               </span>
               <span className="text-[10px] rounded-md px-1.5 py-0.5" style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}>
-                {provider.models.length}
+                {provider?.models?.length}
               </span>
             </div>
             <button
@@ -374,19 +394,19 @@ function VLLMSection() {
         </div>
 
         {/* Show more / less */}
-        {provider.models.length > 6 && (
+        {(provider?.models?.length || 0) > 6 && (
           <button
             onClick={() => setShowAllModels(!showAllModels)}
             className="w-full mt-2 flex items-center justify-center gap-1 rounded-xl py-2.5 text-xs font-medium transition-all"
             style={{ color: 'var(--t-accent-light)' }}
           >
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllModels ? 'rotate-180' : ''}`} />
-            {showAllModels ? '收起' : `显示全部 ${provider.models.length} 个模型`}
+            {showAllModels ? '收起' : `显示全部 ${provider?.models?.length} 个模型`}
           </button>
         )}
 
         {/* Custom model in use notice */}
-        {selectedProvider === 'vllm' && !provider.models.find(m => m.id === selectedModel) && (
+        {selectedProvider === 'vllm' && !provider?.models?.find(m => m.id === selectedModel) && (
           <div
             className="mt-3 flex items-center gap-2 rounded-xl p-3 animate-fade-in"
             style={{
@@ -426,20 +446,58 @@ function OllamaSection() {
     ollamaCustomModel, setOllamaCustomModel, apiKeys, setApiKey,
   } = useStore();
 
-  const provider = modelProviders.find(p => p.id === 'ollama')!;
+  const provider = modelProviders?.find(p => p.id === 'ollama');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [showAllModels, setShowAllModels] = useState(false);
 
+  const { ollamaModels = [], setOllamaModels } = useStore();
+  
   const isCurrentProvider = selectedProvider === 'ollama';
-  const displayedModels = showAllModels ? provider.models : provider.models.slice(0, 6);
-
-  const testConnection = () => {
+  
+  // Combine default models with fetched models
+  const allOllamaModels = [
+    ...(provider?.models || []),
+    ...ollamaModels.filter(m => !(provider?.models || []).some(pm => pm.id === m)).map(m => ({
+      id: m,
+      name: m,
+      description: '本地模型',
+      contextWindow: '-',
+      pricing: '本地免费'
+    }))
+  ];
+  
+  const displayedModels = showAllModels ? allOllamaModels : allOllamaModels.slice(0, 6);
+  
+  const testConnection = async () => {
     setOllamaStatus('connecting');
-    // Simulate connection test
-    setTimeout(() => {
-      const success = Math.random() > 0.3; // simulate
-      setOllamaStatus(success ? 'connected' : 'error');
-    }, 1500);
+    try {
+      const response = await fetch(`${ollamaEndpoint}/api/tags`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const models = data.models || [];
+        const modelNames = models.map((m: any) => m.name);
+        
+        setOllamaModels(modelNames);
+        
+        if (modelNames.length > 0) {
+          setOllamaStatus('connected');
+          // Auto-select first available model
+          setSelectedModel(modelNames[0]);
+          setSelectedProvider('ollama');
+        } else {
+          setOllamaStatus('error');
+        }
+      } else {
+        setOllamaStatus('error');
+      }
+    } catch (error) {
+      console.error('Ollama connection error:', error);
+      setOllamaStatus('error');
+    }
   };
 
   const addCustomModel = () => {
@@ -461,7 +519,7 @@ function OllamaSection() {
   return (
     <div
       className="glass-card rounded-2xl overflow-hidden animate-fade-in"
-      style={{ animationDelay: `${modelProviders.length * 60}ms` }}
+      style={{ animationDelay: `${(modelProviders?.length || 0) * 60}ms` }}
     >
       {/* Ollama Header - Special Design */}
       <div className="relative overflow-hidden">
@@ -684,7 +742,7 @@ function OllamaSection() {
                 可用模型
               </span>
               <span className="text-[10px] rounded-md px-1.5 py-0.5" style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}>
-                {provider.models.length}
+                {provider?.models?.length}
               </span>
             </div>
             <button
@@ -799,19 +857,19 @@ function OllamaSection() {
         </div>
 
         {/* Show more / less */}
-        {provider.models.length > 6 && (
+        {(provider?.models?.length || 0) > 6 && (
           <button
             onClick={() => setShowAllModels(!showAllModels)}
             className="w-full mt-2 flex items-center justify-center gap-1 rounded-xl py-2.5 text-xs font-medium transition-all"
             style={{ color: 'var(--t-accent-light)' }}
           >
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllModels ? 'rotate-180' : ''}`} />
-            {showAllModels ? '收起' : `显示全部 ${provider.models.length} 个模型`}
+            {showAllModels ? '收起' : `显示全部 ${provider?.models?.length} 个模型`}
           </button>
         )}
 
         {/* Custom model in use notice */}
-        {selectedProvider === 'ollama' && !provider.models.find(m => m.id === selectedModel) && (
+        {selectedProvider === 'ollama' && !provider?.models?.find(m => m.id === selectedModel) && (
           <div
             className="mt-3 flex items-center gap-2 rounded-xl p-3 animate-fade-in"
             style={{
@@ -849,7 +907,7 @@ export function ModelsPage() {
   const [expandedProvider, setExpandedProvider] = useState<string | null>(selectedProvider);
 
   // Filter out ollama from the regular providers list since it has its own section
-  const regularProviders = modelProviders.filter(p => p.id !== 'ollama');
+  const regularProviders = (modelProviders || []).filter(p => p.id !== 'ollama');
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -873,7 +931,7 @@ export function ModelsPage() {
               style={{ background: 'var(--t-glass-card)', color: 'var(--t-text-secondary)', border: '1px solid var(--t-glass-border)' }}
             >
               <Cpu className="h-3 w-3" />
-              {modelProviders.reduce((sum, p) => sum + p.models.length, 0)} 个模型
+              {modelProviders?.reduce((sum: number, p: any) => sum + (p.models?.length || 0), 0)} 个模型
             </span>
             <span
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-medium"
@@ -940,7 +998,7 @@ export function ModelsPage() {
                       )}
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--t-text-muted)' }}>
-                      {provider.models.length} 个可用模型
+                      {provider?.models?.length} 个可用模型
                     </p>
                   </div>
                   <div className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>

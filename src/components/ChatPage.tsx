@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { useStore, modelProviders } from '../store';
 import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, Volume1, FileCode, Search, Star, Plus, ThumbsUp, ThumbsDown, Download, Copy, FileJson, File } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
-import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
 import { RAGService } from '../services/ragService';
 import { multimodalService } from '../services/multimodalService';
 import { conversationTemplateService, ConversationTemplate, TemplateCategory } from '../services/conversationTemplateService';
@@ -11,6 +10,14 @@ import { conversationExportService } from '../services/conversationExportService
 import { ttsService } from '../services/ttsService';
 import type { Attachment } from '../types/multimodal';
 import { formatFileSize } from '../types/multimodal';
+
+// Knowledge base store - lazy import
+let kbStore: any = null;
+try {
+  kbStore = require('../stores/knowledgeBaseStore');
+} catch (e) {
+  console.warn('KnowledgeBaseStore not available');
+}
 
 // Helper functions for export
 function downloadFile(content: string, filename: string, mimeType: string) {
@@ -426,19 +433,106 @@ function RAGSources({
   );
 }
 
+function getPromptsForAgent(agent: any): string[] {
+  if (!agent) {
+    return [
+      '帮我写一篇技术博客',
+      '分析这段代码的性能',
+      '设计一个产品方案',
+      '翻译以下内容为英文',
+    ];
+  }
+
+  const categoryPrompts: Record<string, string[]> = {
+    '创意': [
+      '帮我写一篇创意文案',
+      '创作一首诗歌',
+      '写一个故事情节',
+      '设计一个品牌故事',
+    ],
+    '开发': [
+      '帮我写一个函数',
+      '分析这段代码的性能',
+      '帮我优化这段代码',
+      '解释这个错误怎么解决',
+    ],
+    '分析': [
+      '分析这份数据报告',
+      '给我一个SWOT分析',
+      '预测市场趋势',
+      '给出优化建议',
+    ],
+    '语言': [
+      '翻译以下内容为英文',
+      '帮我校对这篇文档',
+      '用更正式的语气改写',
+      '解释这个短语的意思',
+    ],
+    '产品': [
+      '设计一个产品方案',
+      '分析用户需求',
+      '给出功能优先级建议',
+      '设计用户体验流程',
+    ],
+    '设计': [
+      '给一个UI设计建议',
+      '推荐配色方案',
+      '设计一个Logo',
+      '给出布局建议',
+    ],
+    '金融': [
+      '分析这只股票',
+      '给出投资建议',
+      '解释这个财务指标',
+      '评估投资风险',
+    ],
+    '营销': [
+      '制定营销策略',
+      '写一个广告文案',
+      '分析竞品推广',
+      '制定社交媒体计划',
+    ],
+    '教育': [
+      '解释这个概念',
+      '出一道练习题',
+      '制定学习计划',
+      '总结这个知识点',
+    ],
+    '健康': [
+      '给出健康建议',
+      '设计健身计划',
+      '分析饮食结构',
+      '提供心理健康咨询',
+    ],
+    '法律': [
+      '解释这个法律条款',
+      '给出法律建议',
+      '审查这份合同',
+      '说明法律风险',
+    ],
+  };
+
+  return categoryPrompts[agent.category] || [
+    '你好，请帮我',
+    '给我一些建议',
+    '回答我的问题',
+    '帮我分析一下',
+  ];
+}
+
 export function ChatPage() {
   const {
     conversations, activeConversationId, addMessage,
     createConversation, selectedProvider, selectedModel,
     setSelectedProvider, setSelectedModel, isGenerating,
-    activeAgent,
+    activeAgent = null,
   } = useStore();
 
-  const {
-    getSelectedKnowledgeBases,
-    getSelectedChunks,
-    embeddingConfig,
-  } = useKnowledgeBaseStore();
+  // Knowledge base store - with defaults
+  const kb = kbStore?.useKnowledgeBaseStore?.() || {};
+  const getSelectedKnowledgeBases = kb.getSelectedKnowledgeBases || (() => []);
+  const getSelectedChunks = kb.getSelectedChunks || (() => []);
+  const embeddingConfig = kb.embeddingConfig || { model: 'nomic-embed-text', dimensions: 384 };
 
   const [input, setInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -453,8 +547,8 @@ export function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeConv = conversations.find(c => c.id === activeConversationId);
-  const selectedKBs = getSelectedKnowledgeBases();
-  const selectedChunks = getSelectedChunks();
+  const selectedKBs = typeof getSelectedKnowledgeBases === 'function' ? getSelectedKnowledgeBases() : [];
+  const selectedChunks = typeof getSelectedChunks === 'function' ? getSelectedChunks() : [];
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -567,8 +661,10 @@ export function ChatPage() {
     }
     
     let convId = activeConversationId;
-    if (!convId) {
-      convId = createConversation(activeAgent?.id);
+    if (!convId && activeAgent?.id) {
+      convId = createConversation(activeAgent.id);
+    } else if (!convId) {
+      convId = createConversation();
     }
     
     let content = input.trim();
@@ -599,13 +695,26 @@ export function ChatPage() {
       }
     }
     
-    addMessage(convId!, { 
-      role: 'user', 
-      content, 
-      attachments: attachments.length > 0 ? attachments : undefined,
-      ragSources: ragSources || undefined, 
-      ragStats: ragStats || undefined 
-    });
+    const targetConvId = convId || activeConversationId;
+    if (!targetConvId) {
+      // Create a new conversation first
+      const newId = createConversation();
+      addMessage(newId, { 
+        role: 'user', 
+        content, 
+        attachments: attachments.length > 0 ? attachments : undefined,
+        ragSources: ragSources || undefined, 
+        ragStats: ragStats || undefined 
+      });
+    } else {
+      addMessage(targetConvId, { 
+        role: 'user', 
+        content, 
+        attachments: attachments.length > 0 ? attachments : undefined,
+        ragSources: ragSources || undefined, 
+        ragStats: ragStats || undefined 
+      });
+    }
     setInput('');
     setAttachments([]);
     if (inputRef.current) {
@@ -620,8 +729,19 @@ export function ChatPage() {
     ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
   };
 
-  const currentProvider = modelProviders.find(p => p.id === selectedProvider);
-  const currentModel = currentProvider?.models.find(m => m.id === selectedModel);
+  // Safe access to modelProviders
+  const providers = modelProviders || [];
+  const currentProvider = providers.find(p => p.id === selectedProvider);
+  const currentModel = currentProvider?.models?.find(m => m.id === selectedModel);
+  
+  // If selectedModel is not in the list (custom model), create a placeholder
+  const displayModel = currentModel || { 
+    id: selectedModel, 
+    name: selectedModel, 
+    description: '自定义模型', 
+    contextWindow: '-', 
+    pricing: '-' 
+  };
 
   const renderContent = (content: string) => {
     const parts = content.split(/(```[\s\S]*?```)/g);
@@ -700,21 +820,21 @@ export function ChatPage() {
               >
                 <ProviderIcon id={selectedProvider} size={24} />
                 <div className="text-left">
-                  <p className="text-xs font-medium" style={{ color: 'var(--t-text)' }}>{currentModel?.name || selectedModel}</p>
-                  <p className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>{currentProvider?.name}</p>
+                  <p className="text-xs font-medium" style={{ color: 'var(--t-text)' }}>{displayModel?.name || selectedModel}</p>
+                  <p className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>{currentProvider?.name || selectedProvider}</p>
                 </div>
                 <ChevronDown className={`h-4 w-4 transition-transform ${showModelPicker ? 'rotate-180' : ''}`} style={{ color: 'var(--t-text-muted)' }} />
               </button>
 
               {showModelPicker && (
                 <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 glass-strong rounded-xl p-2 w-80 z-50 max-h-80 overflow-y-auto animate-fade-in">
-                  {modelProviders.map(provider => (
+                  {providers.map(provider => (
                     <div key={provider.id} className="mb-1">
                       <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
                         <ProviderIcon id={provider.id} size={16} />
                         <span>{provider.name}</span>
                       </div>
-                      {provider.models.map(model => (
+                      {(provider.models || []).map(model => (
                         <button
                           key={model.id}
                           onClick={() => {
@@ -737,18 +857,36 @@ export function ChatPage() {
                       ))}
                     </div>
                   ))}
+                  {/* Custom model option */}
+                  <div className="mb-1">
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                      <Plus className="h-4 w-4" />
+                      <span>自定义</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowModelPicker(false);
+                        // Navigate to models page
+                      }}
+                      className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-all"
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--t-text-secondary)',
+                      }}
+                    >
+                      <div className="flex-1">
+                        <p className="text-xs font-medium">{selectedModel}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>当前使用</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Quick Prompts */}
             <div className="grid grid-cols-2 gap-2 max-w-md mx-auto">
-              {[
-                '帮我写一篇技术博客',
-                '分析这段代码的性能',
-                '设计一个产品方案',
-                '翻译以下内容为英文',
-              ].map((prompt, i) => (
+              {(activeAgent?.prompts || getPromptsForAgent(activeAgent)).map((prompt, i) => (
                 <button
                   key={i}
                   onClick={() => {
@@ -867,7 +1005,7 @@ export function ChatPage() {
                 <span 
                   className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded cursor-help" 
                   style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}
-                  title={selectedKBs.map(kb => kb.name).join(', ')}
+                  title={selectedKBs.map((kb: any) => kb.name).join(', ')}
                 >
                   <Database className="h-3 w-3" />
                   {selectedKBs.length === 1 
