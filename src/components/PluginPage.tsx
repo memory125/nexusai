@@ -150,22 +150,22 @@ export function PluginPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-600/20 border border-blue-500/20">
-            <Puzzle className="h-5 w-5 text-blue-400" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--t-accent-subtle)', border: '1px solid var(--t-accent-border)' }}>
+            <Puzzle className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">插件中心</h2>
-            <p className="text-xs text-white/60">
+            <h2 className="text-lg font-bold" style={{ color: 'var(--t-text)' }}>插件中心</h2>
+            <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
               发现和使用插件扩展 NexusAI 功能
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-white/60">
+          <span className="text-sm" style={{ color: 'var(--t-text-muted)' }}>
             {plugins.filter((p) => p.status === 'active').length} 个运行中
           </span>
-          <span className="text-sm text-white/60">|</span>
-          <span className="text-sm text-white/60">{plugins.length} 个已安装</span>
+          <span className="text-sm" style={{ color: 'var(--t-text-muted)' }}>|</span>
+          <span className="text-sm" style={{ color: 'var(--t-text-muted)' }}>{plugins.length} 个已安装</span>
         </div>
       </div>
 
@@ -174,33 +174,36 @@ export function PluginPage() {
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('marketplace')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'marketplace'
-                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all`}
+            style={{
+              background: activeTab === 'marketplace' ? 'var(--t-accent-subtle)' : 'transparent',
+              color: activeTab === 'marketplace' ? 'var(--t-accent-light)' : 'var(--t-text-muted)',
+              border: `1px solid ${activeTab === 'marketplace' ? 'var(--t-accent-border)' : 'transparent'}`
+            }}
           >
             <Download className="h-4 w-4" />
             插件市场
           </button>
           <button
             onClick={() => setActiveTab('installed')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'installed'
-                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all`}
+            style={{
+              background: activeTab === 'installed' ? 'var(--t-accent-subtle)' : 'transparent',
+              color: activeTab === 'installed' ? 'var(--t-accent-light)' : 'var(--t-text-muted)',
+              border: `1px solid ${activeTab === 'installed' ? 'var(--t-accent-border)' : 'transparent'}`
+            }}
           >
             <Package className="h-4 w-4" />
             已安装
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'settings'
-                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all`}
+            style={{
+              background: activeTab === 'settings' ? 'var(--t-accent-subtle)' : 'transparent',
+              color: activeTab === 'settings' ? 'var(--t-accent-light)' : 'var(--t-text-muted)',
+              border: `1px solid ${activeTab === 'settings' ? 'var(--t-accent-border)' : 'transparent'}`
+            }}
           >
             <Settings className="h-4 w-4" />
             设置
@@ -214,35 +217,41 @@ export function PluginPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="appearance-none pl-3 pr-8 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500/50 cursor-pointer"
+                className="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-sm focus:outline-none cursor-pointer"
+                style={{ background: 'var(--t-glass-card)', color: 'var(--t-text)', border: '1px solid var(--t-glass-border)' }}
               >
-                <option value="downloads" className="bg-slate-900">最多下载</option>
-                <option value="rating" className="bg-slate-900">最高评分</option>
-                <option value="newest" className="bg-slate-900">最新版本</option>
-                <option value="name" className="bg-slate-900">名称</option>
+                <option value="downloads" style={{ background: 'var(--t-glass-card)' }}>最多下载</option>
+                <option value="rating" style={{ background: 'var(--t-glass-card)' }}>最高评分</option>
+                <option value="newest" style={{ background: 'var(--t-glass-card)' }}>最新版本</option>
+                <option value="name" style={{ background: 'var(--t-glass-card)' }}>名称</option>
               </select>
-              <ArrowUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-white/40 pointer-events-none" />
+              <ArrowUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none" style={{ color: 'var(--t-text-muted)' }} />
             </div>
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-lg transition-all ${
-                viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'
-              }`}
+              className={`p-2 rounded-lg transition-all`}
+              style={{
+                background: viewMode === 'grid' ? 'var(--t-accent-subtle)' : 'transparent',
+                color: viewMode === 'grid' ? 'var(--t-accent-light)' : 'var(--t-text-muted)'
+              }}
             >
               <Grid className="h-4 w-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-all ${
-                viewMode === 'list' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'
-              }`}
+              className={`p-2 rounded-lg transition-all`}
+              style={{
+                background: viewMode === 'list' ? 'var(--t-accent-subtle)' : 'transparent',
+                color: viewMode === 'list' ? 'var(--t-accent-light)' : 'var(--t-text-muted)'
+              }}
             >
               <List className="h-4 w-4" />
             </button>
             <button
               onClick={() => refreshMarketplace()}
               disabled={!!installing}
-              className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-50"
+              className="p-2 rounded-lg transition-all disabled:opacity-50"
+              style={{ color: 'var(--t-text-muted)' }}
             >
               <RefreshCw className={`h-4 w-4 ${installing ? 'animate-spin' : ''}`} />
             </button>
@@ -257,22 +266,24 @@ export function PluginPage() {
             {/* Search and Filter */}
             <div className="flex gap-4">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--t-text-muted)' }} />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="搜索插件..."
-                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-blue-500/50"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg focus:outline-none"
+                  style={{ background: 'var(--t-glass-card)', color: 'var(--t-text)', border: '1px solid var(--t-glass-border)' }}
                 />
               </div>
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value as PluginCategory | 'all')}
-                className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500/50"
+                className="px-4 py-2 rounded-lg focus:outline-none"
+                style={{ background: 'var(--t-glass-card)', color: 'var(--t-text)', border: '1px solid var(--t-glass-border)' }}
               >
                 {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id} className="bg-slate-900">
+                  <option key={cat.id} value={cat.id} style={{ background: 'var(--t-glass-card)' }}>
                     {cat.label}
                   </option>
                 ))}
@@ -282,8 +293,8 @@ export function PluginPage() {
             {/* Featured Section */}
             {!searchQuery && selectedCategory === 'all' && (
               <div>
-                <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
-                  <Award className="h-4 w-4 text-yellow-400" />
+                <h3 className="text-sm font-medium mb-3 flex items-center gap-2" style={{ color: 'var(--t-text-secondary)' }}>
+                  <Award className="h-4 w-4" style={{ color: '#fbbf24' }} />
                   精选插件
                 </h3>
                 <div className="grid grid-cols-3 gap-4">
@@ -303,8 +314,8 @@ export function PluginPage() {
             {/* Trending Section */}
             {!searchQuery && selectedCategory === 'all' && (
               <div>
-                <h3 className="text-sm font-medium text-white/80 mb-3 flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-green-400" />
+                <h3 className="text-sm font-medium mb-3 flex items-center gap-2" style={{ color: 'var(--t-text-secondary)' }}>
+                  <TrendingUp className="h-4 w-4" style={{ color: '#4ade80' }} />
                   热门趋势
                 </h3>
                 <div className="grid grid-cols-3 gap-4">
@@ -323,7 +334,7 @@ export function PluginPage() {
 
             {/* All Plugins */}
             <div>
-              <h3 className="text-sm font-medium text-white/80 mb-3">
+              <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--t-text-secondary)' }}>
                 {searchQuery ? `搜索结果 (${getFilteredPlugins().length})` : `全部插件 (${getFilteredPlugins().length})`}
               </h3>
               <div className={viewMode === 'grid' ? 'grid grid-cols-3 gap-4' : 'space-y-2'}>
@@ -347,26 +358,28 @@ export function PluginPage() {
           <div className="space-y-4">
             {/* Search Installed Plugins */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--t-text-muted)' }} />
               <input
                 type="text"
                 value={installedSearchQuery}
                 onChange={(e) => setInstalledSearchQuery(e.target.value)}
                 placeholder="搜索已安装插件..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-blue-500/50"
+                className="w-full pl-10 pr-4 py-2 rounded-lg focus:outline-none"
+                style={{ background: 'var(--t-glass-card)', color: 'var(--t-text)', border: '1px solid var(--t-glass-border)' }}
               />
             </div>
             
             {getFilteredInstalledPlugins().length === 0 ? (
               <div className="text-center py-12">
-                <Package className="h-12 w-12 mx-auto text-white/20 mb-4" />
-                <p className="text-white/60">
+                <Package className="h-12 w-12 mx-auto mb-4" style={{ color: 'var(--t-text-muted)' }} />
+                <p style={{ color: 'var(--t-text-muted)' }}>
                   {installedSearchQuery ? '没有找到匹配的插件' : '还没有安装任何插件'}
                 </p>
                 {!installedSearchQuery && (
                   <button
                     onClick={() => setActiveTab('marketplace')}
-                    className="mt-4 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-all"
+                    className="mt-4 px-4 py-2 rounded-lg transition-all"
+                    style={{ background: 'var(--t-accent)', color: 'white' }}
                   >
                     浏览插件市场
                   </button>
@@ -376,33 +389,34 @@ export function PluginPage() {
               getFilteredInstalledPlugins().map((plugin) => (
                 <div
                   key={plugin.manifest.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10"
+                  className="flex items-center justify-between p-4 rounded-xl"
+                  style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-600/20">
-                      <Puzzle className="h-5 w-5 text-blue-400" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: 'var(--t-accent-subtle)' }}>
+                      <Puzzle className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">{plugin.manifest.name}</span>
-                        <span className="text-xs text-white/40">v{plugin.manifest.version}</span>
+                        <span className="font-medium" style={{ color: 'var(--t-text)' }}>{plugin.manifest.name}</span>
+                        <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>v{plugin.manifest.version}</span>
                         {plugin.status === 'active' && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.2)', color: '#4ade80' }}>
                             运行中
                           </span>
                         )}
                         {plugin.status === 'error' && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171' }}>
                             错误
                           </span>
                         )}
                         {checkUpdateAvailable(plugin.manifest.id) && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
+                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(234,179,8,0.2)', color: '#eab308' }}>
                             有更新
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-white/50">{plugin.manifest.description}</p>
+                      <p className="text-sm" style={{ color: 'var(--t-text-muted)' }}>{plugin.manifest.description}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -412,20 +426,21 @@ export function PluginPage() {
                           setSelectedPlugin(plugin.manifest);
                           setShowConfigModal(true);
                         }}
-                        className="p-2 rounded-lg hover:bg-white/10 transition-all"
+                        className="p-2 rounded-lg transition-all"
+                        style={{ color: 'var(--t-text-muted)' }}
                         title="配置"
                       >
-                        <Settings className="h-4 w-4 text-white/60" />
+                        <Settings className="h-4 w-4" />
                       </button>
                     )}
                     <button
                       onClick={() => handleToggle(plugin)}
                       disabled={updating === plugin.manifest.id}
-                      className={`p-2 rounded-lg transition-all ${
-                        plugin.status === 'active'
-                          ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20'
-                          : 'bg-white/5 text-white/60 hover:bg-white/10'
-                      }`}
+                      className={`p-2 rounded-lg transition-all`}
+                      style={{
+                        background: plugin.status === 'active' ? 'rgba(34,197,94,0.1)' : 'var(--t-glass-card)',
+                        color: plugin.status === 'active' ? '#4ade80' : 'var(--t-text-muted)'
+                      }}
                     >
                       {plugin.status === 'active' ? (
                         <Square className="h-4 w-4" />
@@ -436,7 +451,8 @@ export function PluginPage() {
                     <button
                       onClick={() => handleUninstall(plugin.manifest.id)}
                       disabled={uninstalling === plugin.manifest.id}
-                      className="p-2 rounded-lg hover:bg-red-500/10 text-white/60 hover:text-red-400 transition-all"
+                      className="p-2 rounded-lg transition-all"
+                      style={{ color: 'var(--t-text-muted)' }}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -449,38 +465,38 @@ export function PluginPage() {
 
         {activeTab === 'settings' && (
           <div className="space-y-6">
-            <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-              <h3 className="font-medium text-white mb-4">关于插件系统</h3>
-              <p className="text-sm text-white/60 leading-relaxed mb-4">
+            <div className="p-6 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
+              <h3 className="font-medium mb-4" style={{ color: 'var(--t-text)' }}>关于插件系统</h3>
+              <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--t-text-secondary)' }}>
                 NexusAI 插件系统允许开发者使用 JavaScript/TypeScript 创建扩展，
                 为应用添加新功能。插件可以访问对话、模型、RAG 知识库、MCP 工具等 API。
               </p>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="p-3 rounded-lg bg-white/5">
-                  <div className="font-medium text-white mb-1">权限控制</div>
-                  <div className="text-white/50">每个插件都需要申请特定权限</div>
+                <div className="p-3 rounded-lg" style={{ background: 'var(--t-glass-input)' }}>
+                  <div className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>权限控制</div>
+                  <div style={{ color: 'var(--t-text-muted)' }}>每个插件都需要申请特定权限</div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/5">
-                  <div className="font-medium text-white mb-1">热插拔</div>
-                  <div className="text-white/50">无需重启即可启用/禁用插件</div>
+                <div className="p-3 rounded-lg" style={{ background: 'var(--t-glass-input)' }}>
+                  <div className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>热插拔</div>
+                  <div style={{ color: 'var(--t-text-muted)' }}>无需重启即可启用/禁用插件</div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/5">
-                  <div className="font-medium text-white mb-1">安全沙箱</div>
-                  <div className="text-white/50">插件在隔离环境中运行</div>
+                <div className="p-3 rounded-lg" style={{ background: 'var(--t-glass-input)' }}>
+                  <div className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>安全沙箱</div>
+                  <div style={{ color: 'var(--t-text-muted)' }}>插件在隔离环境中运行</div>
                 </div>
-                <div className="p-3 rounded-lg bg-white/5">
-                  <div className="font-medium text-white mb-1">自动更新</div>
-                  <div className="text-white/50">插件有新版本时自动提醒</div>
+                <div className="p-3 rounded-lg" style={{ background: 'var(--t-glass-input)' }}>
+                  <div className="font-medium mb-1" style={{ color: 'var(--t-text)' }}>自动更新</div>
+                  <div style={{ color: 'var(--t-text-muted)' }}>插件有新版本时自动提醒</div>
                 </div>
               </div>
             </div>
 
-            <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-              <h3 className="font-medium text-white mb-4">开发文档</h3>
-              <p className="text-sm text-white/60 mb-4">
+            <div className="p-6 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
+              <h3 className="font-medium mb-4" style={{ color: 'var(--t-text)' }}>开发文档</h3>
+              <p className="text-sm mb-4" style={{ color: 'var(--t-text-secondary)' }}>
                 想要创建自己的插件？查看开发文档和示例代码。
               </p>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-all">
+              <button className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all" style={{ background: 'var(--t-accent)', color: 'white' }}>
                 <ExternalLink className="h-4 w-4" />
                 查看文档
               </button>
@@ -491,23 +507,24 @@ export function PluginPage() {
 
       {/* Plugin Detail Modal */}
       {selectedPlugin && !showConfigModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-900 border border-white/10 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl p-6" style={{ background: 'var(--t-glass-bg)', border: '1px solid var(--t-glass-border)' }}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-600/20">
-                  <Puzzle className="h-8 w-8 text-blue-400" />
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl" style={{ background: 'var(--t-accent-subtle)' }}>
+                  <Puzzle className="h-8 w-8" style={{ color: 'var(--t-accent-light)' }} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white">{selectedPlugin.name}</h3>
-                  <p className="text-sm text-white/60">
+                  <h3 className="text-xl font-bold" style={{ color: 'var(--t-text)' }}>{selectedPlugin.name}</h3>
+                  <p className="text-sm" style={{ color: 'var(--t-text-secondary)' }}>
                     v{selectedPlugin.version} by {selectedPlugin.author}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
                     {selectedPlugin.categories.map((cat) => (
                       <span
                         key={cat}
-                        className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/60"
+                        className="text-xs px-2 py-0.5 rounded-full"
+                        style={{ background: 'var(--t-glass-input)', color: 'var(--t-text-muted)' }}
                       >
                         {cat}
                       </span>
@@ -517,33 +534,35 @@ export function PluginPage() {
               </div>
               <button
                 onClick={() => setSelectedPlugin(null)}
-                className="p-2 rounded-lg hover:bg-white/10 transition-all"
+                className="p-2 rounded-lg transition-all"
+                style={{ color: 'var(--t-text-muted)' }}
               >
-                <X className="h-5 w-5 text-white/60" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Stats */}
-            <div className="flex items-center gap-4 mb-4 p-3 rounded-lg bg-white/5">
-              <div className="flex items-center gap-1.5 text-white/70">
+            <div className="flex items-center gap-4 mb-4 p-3 rounded-lg" style={{ background: 'var(--t-glass-input)' }}>
+              <div className="flex items-center gap-1.5" style={{ color: 'var(--t-text-secondary)' }}>
                 <Download className="h-4 w-4" />
                 <span className="text-sm">{formatDownloads(marketplaceCache.find(p => p.manifest.id === selectedPlugin.id)?.downloads || 0)} 次下载</span>
               </div>
-              <div className="flex items-center gap-1.5 text-white/70">
+              <div className="flex items-center gap-1.5" style={{ color: 'var(--t-text-secondary)' }}>
                 <TrendingUp className="h-4 w-4" />
                 <span className="text-sm">{marketplaceCache.find(p => p.manifest.id === selectedPlugin.id)?.rating.toFixed(1) || '0.0'} 评分</span>
               </div>
             </div>
 
-            <p className="text-white/80 mb-6">{selectedPlugin.description}</p>
+            <p className="mb-6" style={{ color: 'var(--t-text-secondary)' }}>{selectedPlugin.description}</p>
 
             <div className="mb-6">
-              <h4 className="font-medium text-white mb-3">所需权限</h4>
+              <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>所需权限</h4>
               <div className="flex flex-wrap gap-2">
                 {selectedPlugin.permissions.map((perm) => (
                   <span
                     key={perm}
-                    className="text-xs px-3 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"
+                    className="text-xs px-3 py-1 rounded-full"
+                    style={{ background: 'rgba(234,179,8,0.1)', color: '#eab308', border: '1px solid rgba(234,179,8,0.2)' }}
                   >
                     <Shield className="h-3 w-3 inline mr-1" />
                     {perm}
