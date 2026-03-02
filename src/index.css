@@ -304,9 +304,9 @@
   --t-glass-border-hover: rgba(0, 0, 0, 0.12);
   --t-glass-input: rgba(0, 0, 0, 0.04);
   --t-glass-input-hover: rgba(0, 0, 0, 0.06);
-  --t-text: #1e293b;
-  --t-text-secondary: #475569;
-  --t-text-muted: #94a3b8;
+  --t-text: #0f172a;
+  --t-text-secondary: #334155;
+  --t-text-muted: #64748b;
   --t-scrollbar: rgba(0, 0, 0, 0.15);
   --t-code-bg: rgba(0, 0, 0, 0.06);
   --t-code-text: #16a34a;
@@ -342,8 +342,8 @@
   --t-glass-input: rgba(139, 92, 246, 0.04);
   --t-glass-input-hover: rgba(139, 92, 246, 0.07);
   --t-text: #1e1b4b;
-  --t-text-secondary: #4c1d95;
-  --t-text-muted: #8b5cf6;
+  --t-text-secondary: #312e81;
+  --t-text-muted: #5b21b6;
   --t-scrollbar: rgba(139, 92, 246, 0.2);
   --t-code-bg: rgba(139, 92, 246, 0.06);
   --t-code-text: #7c3aed;
@@ -380,7 +380,7 @@
   --t-glass-input-hover: rgba(249, 115, 22, 0.07);
   --t-text: #431407;
   --t-text-secondary: #7c2d12;
-  --t-text-muted: #c2410c;
+  --t-text-muted: #9a3412;
   --t-scrollbar: rgba(249, 115, 22, 0.2);
   --t-code-bg: rgba(249, 115, 22, 0.06);
   --t-code-text: #ea580c;
@@ -417,7 +417,7 @@
   --t-glass-input-hover: rgba(16, 185, 129, 0.07);
   --t-text: #064e3b;
   --t-text-secondary: #065f46;
-  --t-text-muted: #10b981;
+  --t-text-muted: #047857;
   --t-scrollbar: rgba(16, 185, 129, 0.2);
   --t-code-bg: rgba(16, 185, 129, 0.06);
   --t-code-text: #059669;
@@ -454,7 +454,7 @@
   --t-glass-input-hover: rgba(59, 130, 246, 0.07);
   --t-text: #1e3a5f;
   --t-text-secondary: #1e40af;
-  --t-text-muted: #60a5fa;
+  --t-text-muted: #1d4ed8;
   --t-scrollbar: rgba(59, 130, 246, 0.2);
   --t-code-bg: rgba(59, 130, 246, 0.06);
   --t-code-text: #2563eb;
@@ -491,7 +491,7 @@
   --t-glass-input-hover: rgba(217, 119, 6, 0.07);
   --t-text: #451a03;
   --t-text-secondary: #78350f;
-  --t-text-muted: #b45309;
+  --t-text-muted: #92400e;
   --t-scrollbar: rgba(217, 119, 6, 0.2);
   --t-code-bg: rgba(217, 119, 6, 0.06);
   --t-code-text: #b45309;
