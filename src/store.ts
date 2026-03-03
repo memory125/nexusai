@@ -519,11 +519,11 @@ export const useStore = create<AppState>()(
       user: null,
       isLoggedIn: false,
   authMode: 'login',
-  login: (email, password) => {
-    set({ user: { id: '1', username: 'Demo', email, avatar: 'D', createdAt: new Date().toISOString() }, isLoggedIn: true });
+login: (_email, _password) => {
+    set({ user: { id: '1', username: 'Demo', email: _email, avatar: 'D', createdAt: new Date().toISOString() }, isLoggedIn: true });
     return true;
   },
-  register: (username, email, password) => {
+  register: (username, email, _password) => {
     set({ user: { id: '1', username, email, avatar: username[0].toUpperCase(), createdAt: new Date().toISOString() }, isLoggedIn: true });
     return true;
   },
