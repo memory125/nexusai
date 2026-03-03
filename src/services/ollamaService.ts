@@ -27,6 +27,22 @@ export interface OllamaResponse {
   done: boolean;
 }
 
+async function fetchWithRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
+  let lastError: Error | null = null;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      console.log(`[Ollama] Retry ${i + 1}/${retries}:`, error);
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export class OllamaService {
   private endpoint: string;
   private defaultModel: string = 'llama3.3:latest';
@@ -47,28 +63,30 @@ export class OllamaService {
     return this.endpoint;
   }
 
-  // Check if Ollama is running
   async checkConnection(): Promise<boolean> {
     try {
-      const response = await invoke<string>('fetch_ollama', { 
-        url: `${this.endpoint}/api/tags`,
-        method: 'GET',
-        body: null
-      });
+      const response = await fetchWithRetry(async () => {
+        return await invoke<string>('fetch_ollama', { 
+          url: `${this.endpoint}/api/tags`,
+          method: 'GET',
+          body: null
+        });
+      }, 3, 500);
       return response.length > 0;
     } catch {
       return false;
     }
   }
 
-  // List available models
   async listModels(): Promise<string[]> {
     try {
-      const response = await invoke<string>('fetch_ollama', {
-        url: `${this.endpoint}/api/tags`,
-        method: 'GET',
-        body: null
-      });
+      const response = await fetchWithRetry(async () => {
+        return await invoke<string>('fetch_ollama', {
+          url: `${this.endpoint}/api/tags`,
+          method: 'GET',
+          body: null
+        });
+      }, 3, 500);
       
       const data = JSON.parse(response);
       return data.models?.map((m: { name: string }) => m.name) || [];
@@ -78,7 +96,6 @@ export class OllamaService {
     }
   }
 
-  // Non-streaming chat completion
   async chat(messages: OllamaMessage[], model?: string): Promise<string> {
     const request: OllamaRequest = {
       model: model || this.defaultModel,
@@ -87,11 +104,13 @@ export class OllamaService {
     };
 
     try {
-      const response = await invoke<string>('fetch_ollama', {
-        url: `${this.endpoint}/api/chat`,
-        method: 'POST',
-        body: JSON.stringify(request)
-      });
+      const response = await fetchWithRetry(async () => {
+        return await invoke<string>('fetch_ollama', {
+          url: `${this.endpoint}/api/chat`,
+          method: 'POST',
+          body: JSON.stringify(request)
+        });
+      }, 2, 2000);
 
       const data: OllamaResponse = JSON.parse(response);
       return data.message.content;
@@ -101,37 +120,37 @@ export class OllamaService {
     }
   }
 
-  // Streaming chat - use non-streaming API and yield chunks
   async *streamChat(
     messages: OllamaMessage[],
     model?: string
   ): AsyncGenerator<string> {
-    // Use non-streaming API since we can't easily do streaming via Tauri invoke
     const request: OllamaRequest = {
       model: model || this.defaultModel,
       messages,
       stream: false,
     };
 
-    const response = await invoke<string>('fetch_ollama', {
-      url: `${this.endpoint}/api/chat`,
-      method: 'POST',
-      body: JSON.stringify(request)
-    });
+    const response = await fetchWithRetry(async () => {
+      return await invoke<string>('fetch_ollama', {
+        url: `${this.endpoint}/api/chat`,
+        method: 'POST',
+        body: JSON.stringify(request)
+      });
+    }, 2, 2000);
 
     const data: OllamaResponse = JSON.parse(response);
-    // Yield the entire content at once (simulating stream)
     yield data.message.content;
   }
 
-  // Generate embeddings
   async generateEmbedding(text: string, model: string = 'nomic-embed-text:latest'): Promise<number[]> {
     try {
-      const response = await invoke<string>('fetch_ollama', {
-        url: `${this.endpoint}/api/embeddings`,
-        method: 'POST',
-        body: JSON.stringify({ model, prompt: text })
-      });
+      const response = await fetchWithRetry(async () => {
+        return await invoke<string>('fetch_ollama', {
+          url: `${this.endpoint}/api/embeddings`,
+          method: 'POST',
+          body: JSON.stringify({ model, prompt: text })
+        });
+      }, 2, 2000);
 
       const data = JSON.parse(response);
       return data.embedding;
@@ -142,7 +161,6 @@ export class OllamaService {
   }
 }
 
-// Singleton instance
 let ollamaService: OllamaService | null = null;
 
 export function getOllamaService(endpoint?: string): OllamaService {

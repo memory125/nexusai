@@ -344,6 +344,36 @@ const defaultAgents: Agent[] = [
   { id: 'civil-engineer', name: '土木工程师', description: '土木工程咨询', icon: '🧱', systemPrompt: '你是一个专业土木工程师', skills: ['civil'], category: '建筑', color: '#f59e0b' },
   { id: 'journalist', name: '记者', description: '新闻写作采访', icon: '📰', systemPrompt: '你是一个专业记者', skills: ['journalism'], category: '媒体', color: '#1e293b' },
   { id: 'pr-specialist', name: '公关专家', description: '公共关系处理', icon: '🎯', systemPrompt: '你是一个专业公关专家', skills: ['pr'], category: '媒体', color: '#8b5cf6' },
+  
+  // 娱乐类
+  { id: 'game-master', name: '游戏大师', description: '游戏攻略专家', icon: '🎮', systemPrompt: '你是一个专业游戏攻略大师', skills: ['gaming'], category: '娱乐', color: '#22c55e' },
+  { id: 'chess-coach', name: '象棋教练', description: '象棋教学指导', icon: '♟️', systemPrompt: '你是一个专业象棋教练', skills: ['chess'], category: '娱乐', color: '#f59e0b' },
+  { id: 'astrologer', name: '占星师', description: '星座运势解读', icon: '🔮', systemPrompt: '你是一个专业占星师', skills: ['astrology'], category: '娱乐', color: '#8b5cf6' },
+  { id: 'magic-tutor', name: '魔术教练', description: '魔术教学', icon: '🎩', systemPrompt: '你是一个专业魔术教练', skills: ['magic'], category: '娱乐', color: '#ec4899' },
+  { id: 'dance-tutor', name: '舞蹈教练', description: '舞蹈教学指导', icon: '💃', systemPrompt: '你是一个专业舞蹈教练', skills: ['dance'], category: '娱乐', color: '#f97316' },
+  
+  // 运动类
+  { id: 'yoga-instructor', name: '瑜伽教练', description: '瑜伽教学', icon: '🧘', systemPrompt: '你是一个专业瑜伽教练', skills: ['yoga'], category: '运动', color: '#14b8a6' },
+  { id: 'sports-coach', name: '运动教练', description: '体育指导', icon: '⚽', systemPrompt: '你是一个专业运动教练', skills: ['sports'], category: '运动', color: '#22c55e' },
+  { id: 'swimming-coach', name: '游泳教练', description: '游泳教学', icon: '🏊', systemPrompt: '你是一个专业游泳教练', skills: ['swimming'], category: '运动', color: '#06b6d4' },
+  { id: 'martial-arts', name: '武术教练', description: '武术教学', icon: '🥋', systemPrompt: '你是一个专业武术教练', skills: ['martial-arts'], category: '运动', color: '#ef4444' },
+  
+  // 科技类
+  { id: 'ai-researcher', name: 'AI研究员', description: '人工智能研究', icon: '🤖', systemPrompt: '你是一个专业AI研究员', skills: ['ai-research'], category: '科技', color: '#6366f1' },
+  { id: 'blockchain-dev', name: '区块链开发', description: '智能合约开发', icon: '⛓️', systemPrompt: '你是一个专业区块链开发者', skills: ['blockchain'], category: '科技', color: '#f59e0b' },
+  { id: 'robotics-expert', name: '机器人专家', description: '机器人技术', icon: '🦾', systemPrompt: '你是一个专业机器人专家', skills: ['robotics'], category: '科技', color: '#8b5cf6' },
+  { id: 'ar-vr-developer', name: 'AR/VR开发', description: '增强现实开发', icon: '🥽', systemPrompt: '你是一个专业AR/VR开发者', skills: ['ar-vr'], category: '科技', color: '#ec4899' },
+  { id: 'iot-expert', name: 'IoT专家', description: '物联网技术', icon: '📡', systemPrompt: '你是一个专业IoT专家', skills: ['iot'], category: '科技', color: '#22c55e' },
+  
+  // 农业类
+  { id: 'agriculture-expert', name: '农业专家', description: '农业技术咨询', icon: '🌾', systemPrompt: '你是一个专业农业专家', skills: ['agriculture'], category: '农业', color: '#22c55e' },
+  { id: 'gardening-expert', name: '园艺专家', description: '植物养护', icon: '🌱', systemPrompt: '你是一个专业园艺专家', skills: ['gardening'], category: '农业', color: '#14b8a6' },
+  { id: 'veterinarian', name: '兽医', description: '宠物医疗', icon: '🐾', systemPrompt: '你是一个专业兽医', skills: ['veterinary'], category: '农业', color: '#f97316' },
+  
+  // 手工艺术类
+  { id: 'craftsman', name: '手工艺人', description: '传统手工艺', icon: '🧵', systemPrompt: '你是一个专业手工艺人', skills: ['crafts'], category: '手工', color: '#f59e0b' },
+  { id: 'jewelry-designer', name: '珠宝设计师', description: '珠宝设计', icon: '💎', systemPrompt: '你是一个专业珠宝设计师', skills: ['jewelry'], category: '手工', color: '#ec4899' },
+  { id: 'woodworking', name: '木工师傅', description: '木工制作', icon: '🪵', systemPrompt: '你是一个专业木工师傅', skills: ['woodworking'], category: '手工', color: '#8b5cf6' },
 ];
 
 // Default skills (100+)
