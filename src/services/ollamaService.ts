@@ -27,7 +27,7 @@ export interface OllamaResponse {
   done: boolean;
 }
 
-async function fetchWithRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
+async function fetchWithRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
   let lastError: Error | null = null;
   for (let i = 0; i < retries; i++) {
     try {
@@ -71,7 +71,7 @@ export class OllamaService {
           method: 'GET',
           body: null
         });
-      }, 3, 500);
+      }, 2, 3000);
       return response.length > 0;
     } catch {
       return false;
@@ -86,7 +86,7 @@ export class OllamaService {
           method: 'GET',
           body: null
         });
-      }, 3, 500);
+      }, 2, 3000);
       
       const data = JSON.parse(response);
       return data.models?.map((m: { name: string }) => m.name) || [];

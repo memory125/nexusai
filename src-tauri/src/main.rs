@@ -1,6 +1,16 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::sync::LazyLock;
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("Failed to create HTTP client")
+});
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
@@ -21,15 +31,9 @@ fn main() {
 async fn fetch_ollama(url: String, method: String, body: Option<String>) -> Result<String, String> {
     println!("[Ollama] Request: {} {}", method, url);
     
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(300))
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| e.to_string())?;
-    
     let request = match method.as_str() {
-        "GET" => client.get(&url),
-        "POST" => client.post(&url),
+        "GET" => HTTP_CLIENT.get(&url),
+        "POST" => HTTP_CLIENT.post(&url),
         _ => return Err("Unsupported method".to_string()),
     };
     
@@ -60,7 +64,8 @@ async fn fetch_ollama(url: String, method: String, body: Option<String>) -> Resu
     }
     
     let text = response.text().await.map_err(|e| e.to_string())?;
-    println!("[Ollama] Response: {}", &text[..text.len().min(200)]);
+    let preview = if text.len() > 200 { &text[..200] } else { &text };
+    println!("[Ollama] Response: {}", preview);
     Ok(text)
 }
 
