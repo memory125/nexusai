@@ -772,8 +772,6 @@ export const useStore = create<AppState>()(
   name: 'nexusai-config',
   storage: createJSONStorage(() => localStorage),
   partialize: (state: AppState) => ({
-    isLoggedIn: state.isLoggedIn,
-    user: state.user,
     selectedProvider: state.selectedProvider,
     selectedModel: state.selectedModel,
     ollamaEndpoint: state.ollamaEndpoint,

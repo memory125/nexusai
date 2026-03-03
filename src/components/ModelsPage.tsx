@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore, modelProviders } from '../store';
 import { Cpu, Check, ExternalLink, Info, Server, Wifi, WifiOff, RefreshCw, Terminal, Download, Plus, HardDrive, MonitorSpeaker, ChevronDown, Zap } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
+import { invoke } from '@tauri-apps/api/core';
 
 function VLLMSection() {
   const {
@@ -471,26 +472,29 @@ function OllamaSection() {
   const testConnection = async () => {
     setOllamaStatus('connecting');
     try {
-      const response = await fetch(`${ollamaEndpoint}/api/tags`, {
+      const response = await invoke<string>('fetch_ollama', {
+        url: `${ollamaEndpoint}/api/tags`,
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        body: null
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        const models = data.models || [];
-        const modelNames = models.map((m: any) => m.name);
-        
-        setOllamaModels(modelNames);
-        
-        if (modelNames.length > 0) {
-          setOllamaStatus('connected');
-          // Auto-select first available model
-          setSelectedModel(modelNames[0]);
-          setSelectedProvider('ollama');
-        } else {
-          setOllamaStatus('error');
-        }
+      console.log('Ollama response:', response);
+      
+      if (!response || response.trim() === '') {
+        setOllamaStatus('error');
+        return;
+      }
+      
+      const data = JSON.parse(response);
+      const models = data.models || [];
+      const modelNames = models.map((m: any) => m.name);
+      
+      setOllamaModels(modelNames);
+      
+      if (modelNames.length > 0) {
+        setOllamaStatus('connected');
+        setSelectedModel(modelNames[0]);
+        setSelectedProvider('ollama');
       } else {
         setOllamaStatus('error');
       }

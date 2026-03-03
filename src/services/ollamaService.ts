@@ -1,4 +1,6 @@
 // Ollama API service
+import { invoke } from '@tauri-apps/api/core';
+
 export interface OllamaMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -30,7 +32,7 @@ export class OllamaService {
   private defaultModel: string = 'llama3.3:latest';
 
   constructor(endpoint: string = 'http://localhost:11434') {
-    this.endpoint = endpoint.replace(/\/$/, ''); // Remove trailing slash
+    this.endpoint = endpoint.replace(/\/$/, '');
   }
 
   setEndpoint(endpoint: string) {
@@ -48,11 +50,12 @@ export class OllamaService {
   // Check if Ollama is running
   async checkConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.endpoint}/api/tags`, {
+      const response = await invoke<string>('fetch_ollama', { 
+        url: `${this.endpoint}/api/tags`,
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        body: null
       });
-      return response.ok;
+      return response.length > 0;
     } catch {
       return false;
     }
@@ -61,10 +64,13 @@ export class OllamaService {
   // List available models
   async listModels(): Promise<string[]> {
     try {
-      const response = await fetch(`${this.endpoint}/api/tags`);
-      if (!response.ok) throw new Error('Failed to fetch models');
+      const response = await invoke<string>('fetch_ollama', {
+        url: `${this.endpoint}/api/tags`,
+        method: 'GET',
+        body: null
+      });
       
-      const data = await response.json();
+      const data = JSON.parse(response);
       return data.models?.map((m: { name: string }) => m.name) || [];
     } catch (error) {
       console.error('Failed to list models:', error);
@@ -81,18 +87,13 @@ export class OllamaService {
     };
 
     try {
-      const response = await fetch(`${this.endpoint}/api/chat`, {
+      const response = await invoke<string>('fetch_ollama', {
+        url: `${this.endpoint}/api/chat`,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
+        body: JSON.stringify(request)
       });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Ollama API error: ${response.status} - ${error}`);
-      }
-
-      const data: OllamaResponse = await response.json();
+      const data: OllamaResponse = JSON.parse(response);
       return data.message.content;
     } catch (error) {
       console.error('Ollama chat error:', error);
@@ -100,75 +101,39 @@ export class OllamaService {
     }
   }
 
-  // Streaming chat completion
+  // Streaming chat - use non-streaming API and yield chunks
   async *streamChat(
     messages: OllamaMessage[],
     model?: string
   ): AsyncGenerator<string> {
+    // Use non-streaming API since we can't easily do streaming via Tauri invoke
     const request: OllamaRequest = {
       model: model || this.defaultModel,
       messages,
-      stream: true,
+      stream: false,
     };
 
-    const response = await fetch(`${this.endpoint}/api/chat`, {
+    const response = await invoke<string>('fetch_ollama', {
+      url: `${this.endpoint}/api/chat`,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(request)
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Ollama API error: ${response.status} - ${error}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const data = JSON.parse(line);
-            if (data.message?.content) {
-              yield data.message.content;
-            }
-            if (data.done) break;
-          } catch {
-            // Skip malformed JSON
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
+    const data: OllamaResponse = JSON.parse(response);
+    // Yield the entire content at once (simulating stream)
+    yield data.message.content;
   }
 
-  // Generate embeddings (for RAG)
+  // Generate embeddings
   async generateEmbedding(text: string, model: string = 'nomic-embed-text:latest'): Promise<number[]> {
     try {
-      const response = await fetch(`${this.endpoint}/api/embeddings`, {
+      const response = await invoke<string>('fetch_ollama', {
+        url: `${this.endpoint}/api/embeddings`,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt: text }),
+        body: JSON.stringify({ model, prompt: text })
       });
 
-      if (!response.ok) {
-        throw new Error(`Embedding API error: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = JSON.parse(response);
       return data.embedding;
     } catch (error) {
       console.error('Failed to generate embedding:', error);

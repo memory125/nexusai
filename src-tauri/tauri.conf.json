@@ -27,61 +27,22 @@
         "theme": "Dark"
       }
     ],
-    "security": {
+"security": {
       "csp": {
         "default-src": "'self' 'unsafe-inline' 'unsafe-eval' blob: data:",
-        "connect-src": "'self' http://localhost:* https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://*.aliyun.com https://*.z.ai https://api.deepseek.com https://api.minimax.chat ws://localhost:*",
+        "connect-src": "*",
         "img-src": "'self' blob: data: https:",
         "style-src": "'self' 'unsafe-inline'",
         "script-src": "'self' 'unsafe-inline' 'unsafe-eval'"
-      },
-      "capabilities": [
-        {
-          "identifier": "default",
-          "description": "Default capabilities for the app",
-          "windows": ["main"],
-          "permissions": [
-            "core:default",
-            "fs:allow-app-read",
-            "fs:allow-app-write",
-            "fs:allow-app-meta",
-            "dialog:allow-open",
-            "dialog:allow-save",
-            "dialog:allow-ask",
-            "dialog:allow-message",
-            "http:default",
-            "notification:default",
-            "shell:allow-open",
-            "clipboard-manager:allow-write-text",
-            "clipboard-manager:allow-read-text"
-          ]
-        }
-      ]
+      }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis", "dmg", "app", "deb", "rpm", "appimage"],
+    "targets": ["nsis"],
     "category": "Productivity",
     "copyright": "Copyright © 2026 NexusAI",
     "publisher": "NexusAI Team",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "macOS": {
-      "frameworks": [],
-      "minimumSystemVersion": "10.13",
-      "license": "",
-      "signingIdentity": null,
-      "entitlements": null,
-      "exceptionDomain": "",
-      "providerShortName": null,
-      "hardenedRuntime": true
-    },
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
@@ -89,14 +50,6 @@
       "tsp": false,
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
-      }
-    },
-    "linux": {
-      "appimage": {
-        "bundleMediaFramework": false
-      },
-      "deb": {
-        "depends": ["libwebkit2gtk-4.0-37", "libgtk-3-0"]
       }
     }
   },
