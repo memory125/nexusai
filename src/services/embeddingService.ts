@@ -3,13 +3,41 @@
 export interface EmbeddingModel {
   id: string;
   name: string;
-  provider: 'openai' | 'huggingface' | 'local';
+  provider: 'openai' | 'huggingface' | 'local' | 'ollama';
   dimensions: number;
   maxTokens: number;
   description: string;
+  defaultModelName?: string; // for ollama: the model name passed to Ollama API
 }
 
 export const EMBEDDING_MODELS: EmbeddingModel[] = [
+  {
+    id: 'ollama-nomic-embed-text',
+    name: 'Ollama nomic-embed-text',
+    provider: 'ollama',
+    dimensions: 768,
+    maxTokens: 8192,
+    description: '本地 Ollama 真语义嵌入，最佳性价比',
+    defaultModelName: 'nomic-embed-text',
+  },
+  {
+    id: 'ollama-mxbai-embed-large',
+    name: 'Ollama mxbai-embed-large',
+    provider: 'ollama',
+    dimensions: 1024,
+    maxTokens: 512,
+    description: '本地 Ollama 高质量嵌入，准确度最高',
+    defaultModelName: 'mxbai-embed-large',
+  },
+  {
+    id: 'ollama-all-minilm',
+    name: 'Ollama all-minilm',
+    provider: 'ollama',
+    dimensions: 384,
+    maxTokens: 256,
+    description: '本地 Ollama 轻量级嵌入，速度快',
+    defaultModelName: 'all-minilm',
+  },
   {
     id: 'text-embedding-3-small',
     name: 'OpenAI Text Embedding 3 Small',
@@ -35,12 +63,20 @@ export const EMBEDDING_MODELS: EmbeddingModel[] = [
     description: '经典的 Ada 嵌入模型',
   },
   {
+    id: 'jina-embeddings-v3',
+    name: 'Jina Embeddings v3',
+    provider: 'huggingface',
+    dimensions: 1024,
+    maxTokens: 8192,
+    description: 'Jina 真语义嵌入，免费层 1M tokens/月',
+  },
+  {
     id: 'sentence-transformers/all-MiniLM-L6-v2',
-    name: 'MiniLM L6 v2 (Local)',
+    name: 'MiniLM L6 v2 (HF)',
     provider: 'huggingface',
     dimensions: 384,
     maxTokens: 256,
-    description: '本地运行的轻量级模型，无需 API Key',
+    description: 'HuggingFace 推理 API 轻量模型，免费有速率限制',
   },
   {
     id: 'simple-hash',
@@ -48,7 +84,7 @@ export const EMBEDDING_MODELS: EmbeddingModel[] = [
     provider: 'local',
     dimensions: 128,
     maxTokens: 10000,
-    description: '简单的本地哈希方法，作为后备方案',
+    description: '简单的本地哈希方法，作为后备方案（无语义）',
   },
 ];
 
@@ -56,6 +92,7 @@ export interface EmbeddingConfig {
   model: string;
   apiKey?: string;
   baseUrl?: string;
+  ollamaModel?: string; // for ollama provider: actual model name
 }
 
 // Performance tracking types
@@ -87,7 +124,7 @@ export class EmbeddingService {
 
   async generateEmbedding(text: string): Promise<number[]> {
     const model = EMBEDDING_MODELS.find(m => m.id === this.config.model);
-    
+
     if (!model) {
       throw new Error(`Unknown embedding model: ${this.config.model}`);
     }
@@ -97,6 +134,8 @@ export class EmbeddingService {
         return this.generateOpenAIEmbedding(text, model.id);
       case 'huggingface':
         return this.generateHuggingFaceEmbedding(text, model.id);
+      case 'ollama':
+        return this.generateOllamaEmbedding(text, model);
       case 'local':
       default:
         return this.generateLocalEmbedding(text);
@@ -147,9 +186,14 @@ export class EmbeddingService {
   }
 
   private async generateHuggingFaceEmbedding(text: string, modelId: string): Promise<number[]> {
+    // Jina Embeddings v3 via Jina API (real semantic, no key required for free tier, no auth needed for many models)
+    if (modelId === 'jina-embeddings-v3') {
+      return this.generateJinaEmbedding(text);
+    }
+
     // Use HuggingFace Inference API
     const apiUrl = this.config.baseUrl || `https://api-inference.huggingface.co/pipeline/feature-extraction/${modelId}`;
-    
+
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
     };
@@ -174,7 +218,7 @@ export class EmbeddingService {
     }
 
     const data = await response.json();
-    
+
     // Handle different response formats
     if (Array.isArray(data) && data.length > 0) {
       if (Array.isArray(data[0])) {
@@ -184,6 +228,98 @@ export class EmbeddingService {
     }
 
     throw new Error('Unexpected HuggingFace API response format');
+  }
+
+  // Jina Embeddings v3 - 真语义, 免费层 1M tokens/月
+  // docs: https://jina.ai/embeddings/
+  private async generateJinaEmbedding(text: string): Promise<number[]> {
+    const apiUrl = this.config.baseUrl || 'https://api.jina.ai/v1/embeddings';
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (this.config.apiKey) {
+      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+    }
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'jina-embeddings-v3',
+        input: [text.slice(0, 8000)],
+        task: 'retrieval.passage',
+        dimensions: 1024,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Jina API ${response.status}: ${err.slice(0, 200)}`);
+    }
+    const data = await response.json();
+    const embedding = data?.data?.[0]?.embedding;
+    if (!Array.isArray(embedding)) throw new Error('Jina 返回格式异常');
+    return embedding;
+  }
+
+  // Ollama 本地嵌入 - 通过 POST /api/embeddings
+  // docs: https://github.com/ollama/ollama/blob/main/docs/api.md#generate-embeddings
+  // 同时兼容 LM Studio / vLLM / llama.cpp server 等 OpenAI 兼容实现
+  private async generateOllamaEmbedding(text: string, model: EmbeddingModel): Promise<number[]> {
+    const baseUrl = (this.config.baseUrl || 'http://localhost:11434').replace(/\/+$/, '');
+    const modelName = this.config.ollamaModel || model.defaultModelName || 'nomic-embed-text';
+    const truncated = text.slice(0, 8000);
+
+    // 1) 先尝试 Ollama 原生格式 /api/embeddings
+    try {
+      const res = await fetch(`${baseUrl}/api/embeddings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelName, prompt: truncated }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.embedding) && data.embedding.length > 0) {
+          return data.embedding;
+        }
+        if (Array.isArray(data?.embeddings) && data.embeddings[0]) {
+          return data.embeddings[0];
+        }
+      }
+    } catch { /* fall through to OpenAI format */ }
+
+    // 2) 回退 OpenAI 兼容格式 /v1/embeddings (LM Studio / vLLM / llama.cpp server)
+    try {
+      const res = await fetch(`${baseUrl}/v1/embeddings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelName, input: truncated }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const embedding = data?.data?.[0]?.embedding;
+        if (Array.isArray(embedding) && embedding.length > 0) {
+          return embedding;
+        }
+      }
+      const errText = await res.text();
+      throw new Error(
+        `Embedding 请求失败 (${res.status}) ${baseUrl}\n` +
+        `已尝试 Ollama (/api/embeddings) 和 OpenAI (/v1/embeddings) 两种格式。\n` +
+        `请确认服务正在运行、模型 ${modelName} 已加载。\n` +
+        `LM Studio 用户：在 Settings → Service 启用 OpenAI 兼容 (默认端口 1234)。\n` +
+        `响应: ${errText.slice(0, 200)}`
+      );
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('Embedding 请求失败')) throw e;
+      throw new Error(
+        `无法连接到 ${baseUrl}。请确认 Ollama / LM Studio 正在运行。\n` +
+        `LM Studio 默认端口 1234，Ollama 默认 11434。\n` +
+        `原始错误: ${e instanceof Error ? e.message : e}`
+      );
+    }
   }
 
   private generateLocalEmbedding(text: string): number[] {
@@ -287,6 +423,10 @@ export class VectorIndex {
       throw new Error(`Vector dimension mismatch. Expected ${this.dimensions}, got ${vector.length}`);
     }
     this.vectors.set(id, vector);
+  }
+
+  getDimensions(): number {
+    return this.dimensions;
   }
 
   remove(id: string) {

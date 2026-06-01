@@ -3,6 +3,12 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Attachment } from './types/multimodal';
 import { getOllamaService } from './services/ollamaService';
 import type { OllamaMessage } from './services/ollamaService';
+import { LLMService } from './services/llmService';
+import { executeSkill, getSkillType } from './services/skillExecutor';
+import type { SkillResult } from './services/skillExecutor/types';
+
+// Module-level AbortController (not serializable, cannot live in Zustand state)
+let currentAbortController: AbortController | null = null;
 
 // Import types from store.ts - we'll add these types
 export interface User {
@@ -40,6 +46,7 @@ export interface Message {
   model?: string;
   ragSources?: RAGSource[];
   ragStats?: RAGPerformanceStats;
+  skillResults?: SkillResult[];
   rating?: 'up' | 'down' | null;
   ratingTimestamp?: number;
 }
@@ -116,23 +123,28 @@ export interface ThemeConfig {
     bg2: string;
     bg3: string;
     accent: string;
+    text: string;
+    textSecondary: string;
+    textMuted: string;
+    glassCard: string;
+    glassBorder: string;
   };
 }
 
 export const themeConfigs: ThemeConfig[] = [
-  { id: 'midnight', name: '午夜星空', description: '深邃紫蓝色调', preview: { bg1: '#0f0a1a', bg2: '#1a1030', bg3: '#6366f1', accent: '#818cf8' } },
-  { id: 'aurora', name: '极光幻境', description: '青绿渐变', preview: { bg1: '#0a1a1a', bg2: '#0d2b2b', bg3: '#06b6d4', accent: '#22d3ee' } },
-  { id: 'sunset', name: '日落余晖', description: '橙红夕阳', preview: { bg1: '#1a0f0a', bg2: '#2d1810', bg3: '#f97316', accent: '#fb923c' } },
-  { id: 'ocean', name: '深海幽蓝', description: '海洋蓝', preview: { bg1: '#0a0f1a', bg2: '#0d1b33', bg3: '#3b82f6', accent: '#60a5fa' } },
-  { id: 'forest', name: '翡翠森林', description: '森林绿', preview: { bg1: '#0a1a0f', bg2: '#102d15', bg3: '#22c55e', accent: '#4ade80' } },
-  { id: 'rose', name: '玫瑰金粉', description: '玫瑰粉', preview: { bg1: '#1a0a14', bg2: '#2d1024', bg3: '#ec4899', accent: '#f472b6' } },
-  { id: 'cyberpunk', name: '赛博朋克', description: '霓虹灯光', preview: { bg1: '#0a0a1a', bg2: '#15052d', bg3: '#a855f7', accent: '#e879f9' } },
-  { id: 'light', name: '清晨白昼', description: '浅色风格', preview: { bg1: '#f0f2f5', bg2: '#e2e5ea', bg3: '#6366f1', accent: '#4f46e5' } },
-  { id: 'light-lavender', name: '薰衣草田', description: '梦幻紫', preview: { bg1: '#f5f0ff', bg2: '#ede4ff', bg3: '#8b5cf6', accent: '#7c3aed' } },
-  { id: 'light-peach', name: '蜜桃暖阳', description: '暖桃橙', preview: { bg1: '#fff5f0', bg2: '#ffe8dd', bg3: '#f97316', accent: '#ea580c' } },
-  { id: 'light-mint', name: '薄荷清风', description: '薄荷绿', preview: { bg1: '#f0fdf4', bg2: '#dcfce7', bg3: '#10b981', accent: '#059669' } },
-  { id: 'light-sky', name: '晴空万里', description: '天空蓝', preview: { bg1: '#f0f7ff', bg2: '#dbeafe', bg3: '#3b82f6', accent: '#2563eb' } },
-  { id: 'light-sand', name: '沙漠暮色', description: '沙金色', preview: { bg1: '#fefce8', bg2: '#fef3c7', bg3: '#d97706', accent: '#b45309' } },
+  { id: 'midnight',     name: '午夜星空', description: '深邃紫蓝色调', preview: { bg1: '#0f0a1a', bg2: '#1a1030', bg3: '#6366f1', accent: '#818cf8', text: '#f1f5f9', textSecondary: '#94a3b8', textMuted: '#64748b', glassCard: 'rgba(255,255,255,0.05)', glassBorder: 'rgba(255,255,255,0.1)' } },
+  { id: 'aurora',       name: '极光幻境', description: '青绿渐变',   preview: { bg1: '#0a1a1a', bg2: '#0d2b2b', bg3: '#06b6d4', accent: '#22d3ee', text: '#ecfeff', textSecondary: '#94a3b8', textMuted: '#64748b', glassCard: 'rgba(255,255,255,0.05)', glassBorder: 'rgba(255,255,255,0.1)' } },
+  { id: 'sunset',       name: '日落余晖', description: '橙红夕阳',   preview: { bg1: '#1a0f0a', bg2: '#2d1810', bg3: '#f97316', accent: '#fb923c', text: '#fff7ed', textSecondary: '#cbd5e1', textMuted: '#94a3b8', glassCard: 'rgba(255,255,255,0.05)', glassBorder: 'rgba(255,255,255,0.1)' } },
+  { id: 'ocean',        name: '深海幽蓝', description: '海洋蓝',     preview: { bg1: '#0a0f1a', bg2: '#0d1b33', bg3: '#3b82f6', accent: '#60a5fa', text: '#eff6ff', textSecondary: '#94a3b8', textMuted: '#64748b', glassCard: 'rgba(255,255,255,0.05)', glassBorder: 'rgba(255,255,255,0.1)' } },
+  { id: 'forest',       name: '翡翠森林', description: '森林绿',     preview: { bg1: '#0a1a0f', bg2: '#102d15', bg3: '#22c55e', accent: '#4ade80', text: '#f0fdf4', textSecondary: '#94a3b8', textMuted: '#64748b', glassCard: 'rgba(255,255,255,0.05)', glassBorder: 'rgba(255,255,255,0.1)' } },
+  { id: 'rose',         name: '玫瑰金粉', description: '玫瑰粉',     preview: { bg1: '#1a0a14', bg2: '#2d1024', bg3: '#ec4899', accent: '#f472b6', text: '#fdf2f8', textSecondary: '#cbd5e1', textMuted: '#94a3b8', glassCard: 'rgba(255,255,255,0.05)', glassBorder: 'rgba(255,255,255,0.1)' } },
+  { id: 'cyberpunk',    name: '赛博朋克', description: '霓虹灯光',   preview: { bg1: '#0a0a1a', bg2: '#15052d', bg3: '#a855f7', accent: '#e879f9', text: '#f5f3ff', textSecondary: '#c4b5fd', textMuted: '#a78bfa', glassCard: 'rgba(255,255,255,0.04)', glassBorder: 'rgba(168,85,247,0.15)' } },
+  { id: 'light',        name: '清晨白昼', description: '浅色风格',   preview: { bg1: '#f0f2f5', bg2: '#e2e5ea', bg3: '#6366f1', accent: '#4f46e5', text: '#0f172a', textSecondary: '#334155', textMuted: '#64748b', glassCard: 'rgba(255,255,255,0.55)', glassBorder: 'rgba(0,0,0,0.08)' } },
+  { id: 'light-lavender', name: '薰衣草田', description: '梦幻紫',   preview: { bg1: '#f5f0ff', bg2: '#ede4ff', bg3: '#8b5cf6', accent: '#7c3aed', text: '#1e1b4b', textSecondary: '#312e81', textMuted: '#4c1d95', glassCard: 'rgba(255,255,255,0.5)',  glassBorder: 'rgba(139,92,246,0.1)' } },
+  { id: 'light-peach',  name: '蜜桃暖阳', description: '暖桃橙',     preview: { bg1: '#fff5f0', bg2: '#ffe8dd', bg3: '#f97316', accent: '#ea580c', text: '#431407', textSecondary: '#7c2d12', textMuted: '#9a3412', glassCard: 'rgba(255,255,255,0.5)',  glassBorder: 'rgba(249,115,22,0.1)' } },
+  { id: 'light-mint',   name: '薄荷清风', description: '薄荷绿',     preview: { bg1: '#f0fdf4', bg2: '#dcfce7', bg3: '#10b981', accent: '#059669', text: '#064e3b', textSecondary: '#065f46', textMuted: '#064e3b', glassCard: 'rgba(255,255,255,0.5)',  glassBorder: 'rgba(16,185,129,0.1)' } },
+  { id: 'light-sky',    name: '晴空万里', description: '天空蓝',     preview: { bg1: '#f0f7ff', bg2: '#dbeafe', bg3: '#3b82f6', accent: '#2563eb', text: '#1e3a5f', textSecondary: '#1e40af', textMuted: '#1d4ed8', glassCard: 'rgba(255,255,255,0.5)',  glassBorder: 'rgba(59,130,246,0.1)' } },
+  { id: 'light-sand',   name: '沙漠暮色', description: '沙金色',     preview: { bg1: '#fefce8', bg2: '#fef3c7', bg3: '#d97706', accent: '#b45309', text: '#451a03', textSecondary: '#78350f', textMuted: '#92400e', glassCard: 'rgba(255,255,255,0.5)',  glassBorder: 'rgba(217,119,6,0.1)' } },
 ];
 
 interface AppState {
@@ -186,17 +198,30 @@ interface AppState {
   vllmCustomModel: string;
   setVllmCustomModel: (m: string) => void;
 
+  lmstudioEndpoint: string;
+  setLmstudioEndpoint: (url: string) => void;
+  lmstudioStatus: 'idle' | 'connecting' | 'connected' | 'error';
+  setLmstudioStatus: (s: 'idle' | 'connecting' | 'connected' | 'error') => void;
+  lmstudioCustomModel: string;
+  setLmstudioCustomModel: (m: string) => void;
+  lmstudioModels: string[];
+  setLmstudioModels: (models: string[]) => void;
+
   agents: Agent[];
   activeAgent: Agent | null;
   setActiveAgent: (agent: Agent | null) => void;
 
   skills: Skill[];
   toggleSkill: (skillId: string) => void;
+  activeSkillIds: string[];
+  setActiveSkillIds: (ids: string[]) => void;
+  toggleActiveSkill: (skillId: string) => void;
 
   sidebarOpen: boolean;
   toggleSidebar: () => void;
   isGenerating: boolean;
   setIsGenerating: (v: boolean) => void;
+  stopGeneration: () => void;
 
   theme: ThemeId;
   setTheme: (theme: ThemeId) => void;
@@ -529,17 +554,103 @@ export const modelProviders: ModelProvider[] = [
     { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B', description: '开源旗舰', contextWindow: '128K', pricing: '本地免费' },
     { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B', description: '大参数版本', contextWindow: '32K', pricing: '本地免费' },
   ]},
+  { id: 'lmstudio', name: 'LM Studio', logo: '🎯', color: '#f43f5e', models: [
+    { id: 'local-model', name: 'Local Model', description: '本地加载的模型', contextWindow: '-', pricing: '本地免费' },
+  ]},
 ];
 
-// Simulated responses for fallback
-const simulatedResponses = {
-  default: [
-    '我理解你的问题。让我来分析一下...',
-    '这是一个很好的问题！让我来详细解答...',
-    '根据我的理解，你可以尝试以下方法...',
-    '我来帮你分析这个问题。首先需要考虑几个方面...',
-  ]
+// Skill prompt mapping — each active skill prepends guidance into the system message
+const SKILL_PROMPTS: Record<string, string> = {
+  'web-search': '在回答之前，你可以要求用户提供更精确的关键词，或表示你会使用联网搜索来获取最新信息。',
+  'news-aggregator': '你善于聚合多源新闻，并对事件进行结构化摘要。',
+  'academic-search': '你能够协助检索学术论文，并使用学术性的严谨语气回答。',
+  'code-search': '你可以引用 GitHub 上常见的实现模式与代码片段。',
+  'coding': '回答代码相关问题时，优先给出可运行示例、关键注释与边界情况。',
+  'code-review': '在审阅代码时，按可读性、性能、安全、可维护性逐项分析。',
+  'debugging': '帮助定位 Bug 时，先复现问题，再给出根因分析与最小修复方案。',
+  'refactoring': '建议重构时，保留行为不变，并提供重构前后的对比。',
+  'testing': '回答测试问题时，给出单元测试、边界用例与覆盖率建议。',
+  'git-helper': '协助 Git 操作时，提供等价的安全命令与回滚方案。',
+  'api-design': '设计 API 时遵循 RESTful 规范，给出 URL、参数、响应示例。',
+  'database-design': '数据库设计时给出表结构、索引建议与 SQL 示例。',
+  'docker-helper': '回答 Docker 问题时提供 Dockerfile 与 docker-compose 示例。',
+  'k8s-helper': 'K8s 相关回答提供 YAML 清单与命令示例。',
+  'security-scan': '进行安全扫描时关注 OWASP Top 10 风险。',
+  'performance-opt': '性能优化建议包含 profiling、瓶颈分析与具体优化手段。',
+  'docs-generator': '生成文档时使用清晰的章节结构与示例代码。',
+  'writing': '写作时注重结构清晰、表达准确、读者友好。',
+  'copywriting': '撰写文案时突出价值主张与行动召唤（CTA）。',
+  'poetry': '创作诗歌时注重韵律、意境与情感表达。',
+  'screenwriting': '剧本创作时遵循三幕结构与场景节拍。',
+  'storytelling': '故事创作时注重人物弧线、冲突与高潮。',
+  'headline-generator': '生成标题时做到吸睛、简洁、贴合主题。',
+  'email-writer': '撰写邮件时保持专业语气与清晰目的。',
+  'blog-writer': '撰写博客时使用小标题、代码块与列表增强可读性。',
+  'social-post': '社媒帖子要短小精悍、引发互动。',
+  'video-script': '视频脚本按镜头、台词、时长编写。',
+  'data-analysis': '数据分析回答包含方法、结论与可视化建议。',
+  'chart-generation': '生成图表时选择最合适的图表类型并标注坐标轴。',
+  'statistical-analysis': '统计分析使用正确的检验方法与显著性解释。',
+  'trend-analysis': '趋势分析包含历史数据回顾与未来预测。',
+  'competitor-analysis': '竞品分析按维度比较并给出差异化建议。',
+  'swot-analysis': 'SWOT 分析结构清晰、可操作。',
+  'sentiment-analysis': '情感分析包含正负面与强度判断。',
+  'translation': '翻译时保持原意、风格与术语一致。',
+  'proofreading': '校对时关注语法、拼写、标点与表达流畅度。',
+  'paraphrasing': '改写时保持原意但变换句式与用词。',
+  'summarization': '摘要要保留核心论点与关键数据。',
+  'language-learning': '语言学习辅导包含例句、语法点与练习。',
+  'tone-adjustment': '语气调整保持信息不变，调整正式度。',
+  'design': 'UI/UX 建议考虑可用性、可达性与视觉层级。',
+  'color-palette': '配色方案遵循色彩理论并给出 HEX 值。',
+  'typography': '字体建议考虑可读性、层级与品牌调性。',
+  'layout-suggestion': '布局建议符合视觉动线与栅格系统。',
+  'logo-ideas': 'Logo 创意简洁、辨识度高、易于延展。',
+  'mockup-generator': '原型描述清晰，可被设计师直接实现。',
+  'marketing': '营销策略基于目标用户与渠道特性。',
+  'seo': 'SEO 建议包含关键词、标题、Meta 与内链。',
+  'ad-copy': '投放文案吸睛、有力、有差异化。',
+  'campaign-ideas': '营销活动创意包含主题、机制与时间表。',
+  'social-strategy': '社媒策略覆盖内容、互动与数据复盘。',
+  'email-marketing': '邮件营销注重主题、CTA 与分段。',
+  'content-strategy': '内容策略包含选题、节奏与转化路径。',
+  'task-management': '任务建议按优先级与依赖关系组织。',
+  'note-taking': '笔记整理使用层级化结构与标签。',
+  'meeting-notes': '会议纪要包含决议、行动项与负责人。',
+  'schedule-planner': '日程规划平衡重要紧急四象限。',
+  'brainstorming': '头脑风暴鼓励发散并引导收敛。',
+  'ppt-generator': 'PPT 大纲按章节、要点与视觉建议组织。',
+  'resume-builder': '简历优化突出成就与量化指标。',
+  'interview-prep': '面试准备包含 STAR 法则与模拟问答。',
+  'image-generation': '生成图片描述时使用具体、光影、构图关键词。',
+  'video-analysis': '视频分析按镜头、节奏、叙事展开。',
+  'audio-transcription': '语音转写时标注说话人与情绪。',
+  'ocr': '文字识别时考虑版式还原与排版校对。',
+  'chart-to-text': '图表解读按数据、趋势、洞察组织。',
+  'legal-consult': '法律咨询以中国法律法规为准，并提示专业律师建议。',
+  'medical-consult': '健康咨询仅供参考，不替代专业医生诊断。',
+  'financial-consult': '理财建议提示风险，不构成投资建议。',
+  'career-consult': '职业咨询关注兴趣、能力与市场需求。',
+  'psychological': '心理咨询保持倾听、共情、不评判。',
+  'game-companion': '游戏攻略包含角色、配装与副本流程。',
+  'movie-recommender': '影视推荐按类型、心情与时长筛选。',
+  'music-recommender': '音乐推荐按风格、场景与心情。',
+  'book-summarizer': '书籍解读按主旨、要点与金句组织。',
+  'recipe-generator': '菜谱包含食材、步骤、技巧与小贴士。',
+  'travel-planner': '旅行规划按日程、交通、住宿与必玩项目。',
+  'fitness-coaching': '健身指导按目标、动作组数与饮食建议。',
+  'horoscope': '星座运势保持积极温和。',
+  'joke-generator': '笑话得体、不冒犯、轻松幽默。',
 };
+
+function buildSkillSystemPrompt(activeSkillIds: string[]): string {
+  if (activeSkillIds.length === 0) return '';
+  const lines = activeSkillIds
+    .map(id => SKILL_PROMPTS[id])
+    .filter(Boolean);
+  if (lines.length === 0) return '';
+  return '【当前启用的技能】\n' + lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
+}
 
 // Create the store with persist middleware for config
 export const useStore = create<AppState>()(
@@ -594,11 +705,11 @@ login: (_email, _password) => {
     return { conversations: convs, activeConversationId: s.activeConversationId === id ? (convs[0]?.id || null) : s.activeConversationId };
   }),
   
-  // Real LLM integration with Ollama
+  // Real LLM integration with all providers + cancellation
   addMessage: async (conversationId, message) => {
     const id = Math.random().toString(36).slice(2, 10);
     const fullMessage: Message = { ...message, id, timestamp: Date.now() };
-    
+
     set(s => ({
       conversations: s.conversations.map(c =>
         c.id === conversationId
@@ -607,133 +718,265 @@ login: (_email, _password) => {
       ),
     }));
 
-    // If user message, call Ollama API
-    if (message.role === 'user') {
-      set({ isGenerating: true });
-      
-      const state = get();
-      const { selectedProvider, selectedModel, ollamaEndpoint, conversations, agents } = state;
-      const currentModel = selectedModel;
-      
-      try {
-        const conversation = conversations.find(c => c.id === conversationId);
-        
-        if (!conversation) {
-          throw new Error('Conversation not found');
-        }
+    if (message.role !== 'user') return;
 
-        // Get agent if conversation has agentId, or use activeAgent from state as fallback
-        const agent = conversation.agentId ? agents.find(a => a.id === conversation.agentId) : (state.activeAgent || null);
-        
-        // Convert messages to Ollama format
-        const ollamaMessages: OllamaMessage[] = [];
-        
-        // Add agent's system prompt as first message if exists
-        if (agent) {
-          ollamaMessages.push({ role: 'system', content: agent.systemPrompt });
+    set({ isGenerating: true });
+
+    // Abort any in-flight request and create a new controller
+    if (currentAbortController) {
+      currentAbortController.abort();
+    }
+    currentAbortController = new AbortController();
+    const { signal } = currentAbortController;
+
+    const state = get();
+    const { selectedProvider, selectedModel, ollamaEndpoint, lmstudioEndpoint, conversations, agents, apiKeys, activeSkillIds } = state;
+    const currentModel = selectedModel;
+
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (!conversation) {
+      set({ isGenerating: false });
+      currentAbortController = null;
+      return;
+    }
+
+    const agent = conversation.agentId
+      ? agents.find(a => a.id === conversation.agentId)
+      : (state.activeAgent || null);
+
+    // Run real skill executors first; collect their context to inject as system messages
+    const skillResults: SkillResult[] = [];
+    const realSkills: string[] = [];
+    const promptOnlySkills: string[] = [];
+    for (const id of activeSkillIds) {
+      if (getSkillType(id) === 'real') realSkills.push(id);
+      else promptOnlySkills.push(id);
+    }
+    if (realSkills.length > 0) {
+      const execResults = await Promise.all(
+        realSkills.map(id => executeSkill(id, {
+          userMessage: message.content,
+          signal,
+          apiKeys,
+        }).catch(e => ({
+          skillId: id,
+          skillName: id,
+          status: 'error' as const,
+          error: e instanceof Error ? e.message : String(e),
+          durationMs: 0,
+        })))
+      );
+      for (const r of execResults) {
+        if (r) skillResults.push(r);
+      }
+    }
+
+    const chatMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+    if (agent) {
+      chatMessages.push({ role: 'system', content: agent.systemPrompt });
+    }
+    const skillPrompt = buildSkillSystemPrompt(promptOnlySkills);
+    if (skillPrompt) {
+      chatMessages.push({ role: 'system', content: skillPrompt });
+    }
+    const realContext = skillResults
+      .filter(r => r.contextBlock)
+      .map(r => r.contextBlock)
+      .join('\n\n');
+    if (realContext) {
+      chatMessages.push({ role: 'system', content: `【实时工具调用结果】\n${realContext}` });
+    }
+    conversation.messages.forEach(m => {
+      chatMessages.push({ role: m.role, content: m.content });
+    });
+    chatMessages.push({ role: 'user', content: message.content });
+
+    const aiId = Math.random().toString(36).slice(2, 10);
+    const placeholderMessage: Message = {
+      id: aiId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      model: selectedModel,
+      skillResults: skillResults.length > 0 ? skillResults : undefined,
+    };
+
+    set(s => ({
+      conversations: s.conversations.map(c =>
+        c.id === conversationId
+          ? { ...c, messages: [...c.messages, placeholderMessage] }
+          : c
+      ),
+    }));
+
+    const updateAssistant = (content: string) => {
+      set(s => ({
+        conversations: s.conversations.map(c =>
+          c.id === conversationId
+            ? { ...c, messages: c.messages.map(m => m.id === aiId ? { ...m, content } : m) }
+            : c
+        ),
+      }));
+    };
+
+    const appendError = (errMsg: string) => {
+      const errorMessage: Message = {
+        id: Math.random().toString(36).slice(2, 10),
+        role: 'assistant',
+        content: `抱歉，发生了错误：${errMsg}\n\n请检查 ${selectedProvider} 服务是否正常，或者尝试切换到其他模型。`,
+        timestamp: Date.now(),
+        model: currentModel,
+      };
+      set(s => ({
+        conversations: s.conversations.map(c =>
+          c.id === conversationId
+            ? { ...c, messages: [...c.messages, errorMessage] }
+            : c
+        ),
+      }));
+    };
+
+    let responseContent = '';
+
+    try {
+      if (selectedProvider === 'ollama') {
+        const ollama = getOllamaService(ollamaEndpoint);
+        ollama.setDefaultModel(selectedModel);
+        const ollamaMessages: OllamaMessage[] = chatMessages as OllamaMessage[];
+        const stream = ollama.streamChat(ollamaMessages, selectedModel, signal);
+        for await (const chunk of stream) {
+          if (signal.aborted) break;
+          responseContent += chunk;
+          updateAssistant(responseContent);
         }
-        
-        // Add existing conversation messages
-        conversation.messages.forEach(m => {
-          ollamaMessages.push({ role: m.role, content: m.content });
+      } else if (selectedProvider === 'lmstudio') {
+        const response = await fetch(`${lmstudioEndpoint}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(apiKeys['lmstudio'] ? { 'Authorization': `Bearer ${apiKeys['lmstudio']}` } : {}),
+          },
+          body: JSON.stringify({ model: selectedModel, messages: chatMessages, stream: true }),
+          signal,
         });
-        
-        // Add current user message
-        ollamaMessages.push({ role: 'user', content: message.content });
-
-        let responseContent = '';
-
-        // Check if using Ollama
-        if (selectedProvider === 'ollama') {
-          const ollama = getOllamaService(ollamaEndpoint);
-          ollama.setDefaultModel(selectedModel);
-          
-          // Use streaming for real-time response
-          const stream = ollama.streamChat(ollamaMessages);
-          
-          // Create placeholder for streaming response
-          const aiId = Math.random().toString(36).slice(2, 10);
-          const placeholderMessage: Message = {
-            id: aiId,
-            role: 'assistant',
-            content: '',
-            timestamp: Date.now(),
-            model: selectedModel,
-          };
-          
-          // Add placeholder message
-          set(s => ({
-            conversations: s.conversations.map(c =>
-              c.id === conversationId
-                ? { ...c, messages: [...c.messages, placeholderMessage] }
-                : c
-            ),
-          }));
-
-          // Stream the response
-          for await (const chunk of stream) {
-            responseContent += chunk;
-            // Update message in real-time
-            set(s => ({
-              conversations: s.conversations.map(c =>
-                c.id === conversationId
-                  ? {
-                      ...c,
-                      messages: c.messages.map(m =>
-                        m.id === aiId ? { ...m, content: responseContent } : m
-                      )
-                    }
-                  : c
-              ),
-            }));
-          }
-        } else {
-          // For non-Ollama providers, use simulated response
-          const responses = simulatedResponses.default;
-          responseContent = responses[Math.floor(Math.random() * responses.length)];
-          
-          const aiId = Math.random().toString(36).slice(2, 10);
-          const aiMessage: Message = {
-            id: aiId,
-            role: 'assistant',
-            content: responseContent,
-            timestamp: Date.now(),
-            model: selectedModel,
-          };
-          
-          set(s => ({
-            conversations: s.conversations.map(c =>
-              c.id === conversationId
-                ? { ...c, messages: [...c.messages, aiMessage], updatedAt: Date.now() }
-                : c
-            ),
-            isGenerating: false,
-          }));
-          return;
+        if (!response.ok) {
+          throw new Error(`LM Studio API error: ${response.status} ${response.statusText}`);
         }
-        
-        set({ isGenerating: false });
-      } catch (error) {
-        console.error('LLM API error:', error);
-        
-        // Add error message
-        const errorId = Math.random().toString(36).slice(2, 10);
-        const errorMessage: Message = {
-          id: errorId,
-          role: 'assistant',
-          content: `抱歉，发生了错误：${error instanceof Error ? error.message : '未知错误'}\n\n请检查 Ollama 是否正在运行，或者尝试切换到其他模型。`,
-          timestamp: Date.now(),
-          model: currentModel,
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (signal.aborted) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith('data: ')) continue;
+              const data = trimmed.slice(6);
+              if (data === '[DONE]') continue;
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta?.content;
+                if (delta) {
+                  responseContent += delta;
+                  updateAssistant(responseContent);
+                }
+              } catch { /* skip malformed */ }
+            }
+          }
+        }
+      } else if (selectedProvider === 'anthropic') {
+        const apiKey = apiKeys['anthropic'];
+        if (!apiKey) throw new Error('未配置 Anthropic API Key，请在设置中填入');
+        const systemMsg = chatMessages.find(m => m.role === 'system');
+        const userMsgs = chatMessages.filter(m => m.role !== 'system');
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            max_tokens: 4096,
+            system: systemMsg?.content,
+            messages: userMsgs.map(m => ({ role: m.role, content: m.content })),
+            stream: true,
+          }),
+          signal,
+        });
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Anthropic API error: ${response.status} ${errText}`);
+        }
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (signal.aborted) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith('data: ')) continue;
+              const data = trimmed.slice(6);
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                  responseContent += parsed.delta.text;
+                  updateAssistant(responseContent);
+                }
+              } catch { /* skip */ }
+            }
+          }
+        }
+      } else {
+        // OpenAI-compatible cloud providers
+        const providerConfig: Record<string, { baseUrl: string; keyName: string }> = {
+          openai:   { baseUrl: 'https://api.openai.com/v1',         keyName: 'openai' },
+          google:   { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', keyName: 'google' },
+          qwen:     { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', keyName: 'qwen' },
+          zhipu:    { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', keyName: 'zhipu' },
+          minimax:  { baseUrl: 'https://api.minimax.chat/v1',       keyName: 'minimax' },
+          deepseek: { baseUrl: 'https://api.deepseek.com/v1',       keyName: 'deepseek' },
         };
-        
-        set(s => ({
-          conversations: s.conversations.map(c =>
-            c.id === conversationId
-              ? { ...c, messages: [...c.messages, errorMessage] }
-              : c
-          ),
-          isGenerating: false,
-        }));
+        const cfg = providerConfig[selectedProvider];
+        if (!cfg) throw new Error(`不支持的模型厂商: ${selectedProvider}`);
+        const apiKey = apiKeys[cfg.keyName];
+        if (!apiKey) throw new Error(`未配置 ${selectedProvider} API Key，请在设置中填入`);
+
+        const llm = new LLMService(apiKey, cfg.baseUrl);
+        const stream = llm.streamChatCompletion(
+          { model: selectedModel, messages: chatMessages, stream: true },
+          signal
+        );
+        for await (const chunk of stream) {
+          if (signal.aborted) break;
+          responseContent += chunk;
+          updateAssistant(responseContent);
+        }
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        console.log('Generation cancelled by user');
+      } else {
+        console.error('LLM API error:', error);
+        appendError(error instanceof Error ? error.message : '未知错误');
+      }
+    } finally {
+      set({ isGenerating: false });
+      if (currentAbortController?.signal === signal) {
+        currentAbortController = null;
       }
     }
   },
@@ -780,6 +1023,16 @@ login: (_email, _password) => {
   vllmCustomModel: '',
   setVllmCustomModel: (m) => set({ vllmCustomModel: m }),
 
+  // LM Studio
+  lmstudioEndpoint: 'http://localhost:1234',
+  setLmstudioEndpoint: (url) => set({ lmstudioEndpoint: url, lmstudioStatus: 'idle' }),
+  lmstudioStatus: 'idle',
+  setLmstudioStatus: (s) => set({ lmstudioStatus: s }),
+  lmstudioCustomModel: '',
+  setLmstudioCustomModel: (m) => set({ lmstudioCustomModel: m }),
+  lmstudioModels: [],
+  setLmstudioModels: (models) => set({ lmstudioModels: models }),
+
   // Agents
   agents: defaultAgents,
   activeAgent: null,
@@ -788,27 +1041,117 @@ login: (_email, _password) => {
   // Skills
   skills: defaultSkills,
   toggleSkill: (skillId) => set(s => ({ skills: s.skills.map(s => s.id === skillId ? { ...s, enabled: !s.enabled } : s) })),
+  activeSkillIds: [],
+  setActiveSkillIds: (ids) => set({ activeSkillIds: ids }),
+  toggleActiveSkill: (skillId) => set(s => ({
+    activeSkillIds: s.activeSkillIds.includes(skillId)
+      ? s.activeSkillIds.filter(id => id !== skillId)
+      : [...s.activeSkillIds, skillId]
+  })),
 
   // UI
   sidebarOpen: true,
   toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
   isGenerating: false,
   setIsGenerating: (v) => set({ isGenerating: v }),
+  stopGeneration: () => {
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+    }
+    set({ isGenerating: false });
+  },
 
   // Theme
   theme: 'midnight',
   setTheme: (theme) => set({ theme }),
 }), {
   name: 'nexusai-config',
-  storage: createJSONStorage(() => localStorage),
+  storage: createJSONStorage(() => {
+    // 容错 localStorage 写入 (避免 QuotaExceededError 阻塞 UI)
+    const safeStorage = {
+      getItem: (name: string) => {
+        try { return localStorage.getItem(name); }
+        catch (e) { console.warn('localStorage.getItem failed:', e); return null; }
+      },
+      setItem: (name: string, value: string) => {
+        try { localStorage.setItem(name, value); }
+        catch (e) {
+          console.warn('localStorage.setItem failed (quota?):', e);
+          // 尝试清理旧数据后重试一次
+          if (e instanceof Error && /quota|exceed/i.test(e.message)) {
+            try {
+              // 清理搜索历史等可重建数据
+              localStorage.removeItem('intelligent_search_history');
+              localStorage.setItem(name, value);
+            } catch (e2) {
+              console.error('localStorage retry failed:', e2);
+            }
+          }
+        }
+      },
+      removeItem: (name: string) => {
+        try { localStorage.removeItem(name); } catch (e) { /* ignore */ }
+      },
+    };
+    return safeStorage as Storage;
+  }),
+  version: 2,
   partialize: (state: AppState) => ({
+    // 页面/导航
+    currentPage: state.currentPage,
+    activeConversationId: state.activeConversationId,
+
+    // 聊天历史 (裁剪过大的消息, 避免 localStorage 溢出)
+    conversations: (state.conversations || []).map((c) => ({
+      ...c,
+      messages: (c.messages || []).map((m) => ({
+        ...m,
+        content: typeof m.content === 'string' && m.content.length > 50000
+          ? m.content.slice(0, 50000) + '\n\n[... 已截断,完整内容未保存 ...]'
+          : m.content,
+      })),
+    })),
+    folders: state.folders,
+
+    // 模型/LLM 配置
     selectedProvider: state.selectedProvider,
     selectedModel: state.selectedModel,
+    apiKeys: state.apiKeys,
     ollamaEndpoint: state.ollamaEndpoint,
     ollamaCustomModel: state.ollamaCustomModel,
     vllmEndpoint: state.vllmEndpoint,
     vllmCustomModel: state.vllmCustomModel,
-    apiKeys: state.apiKeys,
+    lmstudioEndpoint: state.lmstudioEndpoint,
+    lmstudioCustomModel: state.lmstudioCustomModel,
+
+    // Agents & Skills (用户自定义 + 启用状态)
+    agents: state.agents,
+    activeAgent: state.activeAgent,
+    skills: state.skills,
+    activeSkillIds: state.activeSkillIds,
+
+    // 主题
     theme: state.theme,
   }),
+  // 合并持久化状态: 默认值 + 用户自定义 (避免丢失内置 agents/skills)
+  merge: (persistedState: any, currentState: AppState) => {
+    if (!persistedState) return currentState;
+    return {
+      ...currentState,
+      ...persistedState,
+      // 合并 agents: 内置 + 用户自定义
+      agents: mergeById(currentState.agents || [], persistedState.agents || []),
+      // 合并 skills: 内置 + 用户自定义
+      skills: mergeById(currentState.skills || [], persistedState.skills || []),
+    };
+  },
 }));
+
+// 按 id 合并两个数组, 后者覆盖前者同名项
+function mergeById<T extends { id: string }>(base: T[], override: T[]): T[] {
+  const map = new Map<string, T>();
+  base.forEach((item) => map.set(item.id, item));
+  override.forEach((item) => map.set(item.id, item));
+  return Array.from(map.values());
+}

@@ -440,6 +440,419 @@ function VLLMSection() {
   );
 }
 
+function LMStudioSection() {
+  const {
+    selectedProvider, selectedModel, setSelectedProvider, setSelectedModel,
+    lmstudioEndpoint, setLmstudioEndpoint, lmstudioStatus, setLmstudioStatus,
+    lmstudioCustomModel, setLmstudioCustomModel, apiKeys, setApiKey,
+  } = useStore();
+
+  const provider = modelProviders?.find(p => p.id === 'lmstudio');
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [showAllModels, setShowAllModels] = useState(false);
+  const { lmstudioModels = [], setLmstudioModels } = useStore();
+
+  const isCurrentProvider = selectedProvider === 'lmstudio';
+  
+  const allLmstudioModels = [
+    ...(provider?.models || []),
+    ...lmstudioModels.filter(m => !(provider?.models || []).some(pm => pm.id === m)).map(m => ({
+      id: m,
+      name: m,
+      description: '本地加载模型',
+      contextWindow: '-',
+      pricing: '本地免费'
+    }))
+  ];
+  
+  const displayedModels = showAllModels ? allLmstudioModels : allLmstudioModels.slice(0, 6);
+
+  const testConnection = async () => {
+    setLmstudioStatus('connecting');
+    try {
+      const response = await fetch(`${lmstudioEndpoint}/v1/models`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const models = data.data || [];
+        const modelNames = models.map((m: { id: string }) => m.id);
+        
+        setLmstudioModels(modelNames);
+        
+        if (modelNames.length > 0) {
+          setLmstudioStatus('connected');
+          setSelectedModel(modelNames[0]);
+          setSelectedProvider('lmstudio');
+        } else {
+          setLmstudioStatus('error');
+        }
+      } else {
+        setLmstudioStatus('error');
+      }
+    } catch (error) {
+      console.error('LM Studio connection error:', error);
+      setLmstudioStatus('error');
+    }
+  };
+
+  const addCustomModel = () => {
+    if (!lmstudioCustomModel.trim()) return;
+    setSelectedProvider('lmstudio');
+    setSelectedModel(lmstudioCustomModel.trim());
+    setShowCustomInput(false);
+  };
+
+  const statusConfig = {
+    idle: { color: 'var(--t-text-muted)', bg: 'var(--t-glass-card)', text: '未连接', icon: <WifiOff className="h-3 w-3" /> },
+    connecting: { color: 'var(--t-accent)', bg: 'var(--t-accent-subtle)', text: '连接中...', icon: <RefreshCw className="h-3 w-3 animate-spin" /> },
+    connected: { color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', text: '已连接', icon: <Wifi className="h-3 w-3" /> },
+    error: { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', text: '连接失败', icon: <WifiOff className="h-3 w-3" /> },
+  };
+
+  const status = statusConfig[lmstudioStatus];
+
+  return (
+    <div
+      className="glass-card rounded-2xl overflow-hidden animate-fade-in"
+      style={{ animationDelay: `${(modelProviders?.length || 0) * 60}ms` }}
+    >
+      <div className="relative overflow-hidden">
+        <div
+          className="absolute top-0 left-0 right-0 h-1"
+          style={{
+            background: 'linear-gradient(90deg, #f43f5e, #ec4899, #a855f7)',
+          }}
+        />
+
+        <div className="p-5 pt-6">
+          <div className="flex items-start gap-4">
+            <div
+              className="relative flex h-14 w-14 items-center justify-center rounded-2xl shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, rgba(244,63,94,0.15), rgba(236,72,153,0.15))',
+                border: '1px solid rgba(244,63,94,0.2)',
+              }}
+            >
+              <ProviderIcon id="lmstudio" size={36} />
+              {lmstudioStatus === 'connected' && (
+                <div className="absolute -top-0.5 -right-0.5 h-3 w-3">
+                  <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-30" />
+                  <div className="absolute inset-0.5 rounded-full bg-green-400" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-bold" style={{ color: 'var(--t-text)' }}>LM Studio</h3>
+                <span
+                  className="rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(244,63,94,0.15), rgba(236,72,153,0.15))',
+                    color: '#f43f5e',
+                    border: '1px solid rgba(244,63,94,0.2)',
+                  }}
+                >
+                  🖥️ 本地部署
+                </span>
+                {isCurrentProvider && (
+                  <span
+                    className="rounded-md px-2 py-0.5 text-[10px] font-medium"
+                    style={{ background: 'var(--t-badge-bg)', color: 'var(--t-badge-text)' }}
+                  >
+                    当前使用
+                  </span>
+                )}
+              </div>
+              <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--t-text-secondary)' }}>
+                在本地运行开源大模型，提供 OpenAI 兼容 API，完全离线、数据私密、零成本
+              </p>
+            </div>
+
+            <div
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 shrink-0"
+              style={{ background: status.bg, color: status.color, border: `1px solid ${status.color}25` }}
+            >
+              {status.icon}
+              <span className="text-[10px] font-medium">{status.text}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-5 pb-5" style={{ borderTop: '1px solid var(--t-glass-border)' }}>
+
+        <div className="grid grid-cols-4 gap-2 py-4">
+          {[
+            { icon: <HardDrive className="h-3.5 w-3.5" />, label: '本地运行', desc: '无需网络' },
+            { icon: <Server className="h-3.5 w-3.5" />, label: '数据私密', desc: '不上传数据' },
+            { icon: <MonitorSpeaker className="h-3.5 w-3.5" />, label: 'OpenAI API', desc: '兼容接口' },
+            { icon: <Download className="h-3.5 w-3.5" />, label: '零成本', desc: '完全免费' },
+          ].map((feat, i) => (
+            <div
+              key={i}
+              className="flex flex-col items-center text-center rounded-xl p-2.5"
+              style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}
+            >
+              <div className="mb-1" style={{ color: 'var(--t-accent-light)' }}>{feat.icon}</div>
+              <span className="text-[10px] font-medium" style={{ color: 'var(--t-text)' }}>{feat.label}</span>
+              <span className="text-[9px]" style={{ color: 'var(--t-text-muted)' }}>{feat.desc}</span>
+            </div>
+          ))}
+        </div>
+
+        <div
+          className="rounded-xl p-4 mb-4"
+          style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Terminal className="h-3.5 w-3.5" style={{ color: 'var(--t-accent-light)' }} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--t-text)' }}>服务器配置</span>
+          </div>
+
+          <div className="mb-3">
+            <label className="mb-1.5 block text-[10px] font-medium" style={{ color: 'var(--t-text-secondary)' }}>
+              LM Studio 服务地址
+            </label>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Server className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'var(--t-text-muted)' }} />
+                <input
+                  type="text"
+                  value={lmstudioEndpoint}
+                  onChange={e => setLmstudioEndpoint(e.target.value)}
+                  className="glass-input w-full rounded-lg py-2.5 pl-9 pr-3 text-xs font-mono"
+                  placeholder="http://localhost:1234"
+                />
+              </div>
+              <button
+                onClick={testConnection}
+                disabled={lmstudioStatus === 'connecting'}
+                className="glass-btn flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium shrink-0 disabled:opacity-50"
+              >
+                {lmstudioStatus === 'connecting' ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Wifi className="h-3.5 w-3.5" />
+                )}
+                测试连接
+              </button>
+            </div>
+          </div>
+
+          {lmstudioStatus === 'connected' && (
+            <div className="flex items-center gap-2 rounded-lg p-2.5 animate-fade-in" style={{ background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.15)' }}>
+              <Check className="h-3.5 w-3.5 text-green-400" />
+              <span className="text-[10px] text-green-400">
+                已成功连接到 LM Studio 服务 ({lmstudioEndpoint})，发现 {lmstudioModels.length} 个模型
+              </span>
+            </div>
+          )}
+          {lmstudioStatus === 'error' && (
+            <div className="flex items-start gap-2 rounded-lg p-2.5 animate-fade-in" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+              <WifiOff className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="text-[10px] text-red-400 block">
+                  无法连接到 LM Studio 服务，请检查：
+                </span>
+                <ul className="text-[10px] text-red-400/70 mt-1 ml-3 list-disc space-y-0.5">
+                  <li>确认 LM Studio 已安装并正在运行</li>
+                  <li>在 LM Studio 中启动本地服务器 (Local Server)</li>
+                  <li>检查端口号是否正确 (默认 1234)</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-3">
+            <label className="mb-1.5 block text-[10px] font-medium" style={{ color: 'var(--t-text-secondary)' }}>
+              API Key <span style={{ color: 'var(--t-text-muted)' }}>(可选 - 远程部署时使用)</span>
+            </label>
+            <input
+              type="password"
+              value={apiKeys['lmstudio'] || ''}
+              onChange={e => setApiKey('lmstudio', e.target.value)}
+              className="glass-input w-full rounded-lg py-2 px-3 text-xs"
+              placeholder="本地部署无需填写..."
+            />
+          </div>
+        </div>
+
+        <div
+          className="rounded-xl p-4 mb-4"
+          style={{
+            background: 'linear-gradient(135deg, rgba(244,63,94,0.05), rgba(236,72,153,0.05))',
+            border: '1px solid rgba(244,63,94,0.1)',
+          }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Download className="h-3.5 w-3.5" style={{ color: '#f43f5e' }} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--t-text)' }}>快速开始</span>
+          </div>
+          <div className="space-y-2">
+            {[
+              { step: '1', text: '下载 LM Studio', cmd: 'lmstudio.ai/download' },
+              { step: '2', text: '搜索并下载模型', cmd: '搜索 Llama, Qwen, Mistral 等' },
+              { step: '3', text: '启动本地服务器', cmd: '点击 Local Server → Start Server' },
+            ].map(item => (
+              <div key={item.step} className="flex items-center gap-3">
+                <div
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(244,63,94,0.2), rgba(236,72,153,0.2))',
+                    color: '#f43f5e',
+                  }}
+                >
+                  {item.step}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] font-medium" style={{ color: 'var(--t-text-secondary)' }}>{item.text}</span>
+                  <code
+                    className="ml-2 text-[10px] font-mono px-2 py-0.5 rounded"
+                    style={{ background: 'var(--t-code-bg)', color: 'var(--t-code-text)' }}
+                  >
+                    {item.cmd}
+                  </code>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                可用模型
+              </span>
+              <span className="text-[10px] rounded-md px-1.5 py-0.5" style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}>
+                {allLmstudioModels.length}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowCustomInput(!showCustomInput)}
+              className="glass-btn flex items-center gap-1 rounded-lg px-3 py-1.5 text-[10px] font-medium"
+            >
+              <Plus className="h-3 w-3" />
+              自定义模型
+            </button>
+          </div>
+
+          {showCustomInput && (
+            <div className="flex gap-2 mb-3 animate-fade-in">
+              <input
+                type="text"
+                value={lmstudioCustomModel}
+                onChange={e => setLmstudioCustomModel(e.target.value)}
+                className="glass-input flex-1 rounded-lg py-2 px-3 text-xs font-mono"
+                placeholder="输入模型名称..."
+                onKeyDown={e => e.key === 'Enter' && addCustomModel()}
+              />
+              <button
+                onClick={addCustomModel}
+                disabled={!lmstudioCustomModel.trim()}
+                className="glass-btn-primary rounded-lg px-4 py-2 text-xs font-medium disabled:opacity-40"
+              >
+                使用
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          {displayedModels.map(model => {
+            const isSelected = selectedModel === model.id && selectedProvider === 'lmstudio';
+
+            return (
+              <button
+                key={model.id}
+                onClick={() => { setSelectedProvider('lmstudio'); setSelectedModel(model.id); }}
+                className="w-full flex items-center gap-3 rounded-xl p-3.5 text-left transition-all group"
+                style={{
+                  background: isSelected ? 'var(--t-accent-subtle)' : 'var(--t-glass-card)',
+                  border: `1px solid ${isSelected ? 'var(--t-accent-border)' : 'transparent'}`,
+                }}
+              >
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                  style={{
+                    background: isSelected
+                      ? 'linear-gradient(135deg, rgba(244,63,94,0.2), rgba(236,72,153,0.2))'
+                      : 'var(--t-glass-card)',
+                    border: '1px solid var(--t-glass-border)',
+                  }}
+                >
+                  <ProviderIcon id="lmstudio" size={24} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-semibold" style={{ color: 'var(--t-text)' }}>{model.name}</h4>
+                    {isSelected && <Check className="h-3.5 w-3.5" style={{ color: 'var(--t-accent-light)' }} />}
+                  </div>
+                  <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--t-text-muted)' }}>{model.description}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
+                    <Info className="h-3 w-3" />
+                    {model.contextWindow}
+                  </div>
+                  <span
+                    className="text-[10px] font-medium"
+                    style={{ color: '#22c55e' }}
+                  >
+                    {model.pricing}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {(provider?.models?.length || 0) > 6 && (
+          <button
+            onClick={() => setShowAllModels(!showAllModels)}
+            className="w-full mt-2 flex items-center justify-center gap-1 rounded-xl py-2.5 text-xs font-medium transition-all"
+            style={{ color: 'var(--t-accent-light)' }}
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAllModels ? 'rotate-180' : ''}`} />
+            {showAllModels ? '收起' : `显示全部 ${provider?.models?.length} 个模型`}
+          </button>
+        )}
+
+        {selectedProvider === 'lmstudio' && !provider?.models?.find(m => m.id === selectedModel) && (
+          <div
+            className="mt-3 flex items-center gap-2 rounded-xl p-3 animate-fade-in"
+            style={{
+              background: 'linear-gradient(135deg, rgba(244,63,94,0.08), rgba(236,72,153,0.08))',
+              border: '1px solid rgba(244,63,94,0.15)',
+            }}
+          >
+            <Terminal className="h-3.5 w-3.5 shrink-0" style={{ color: '#f43f5e' }} />
+            <span className="text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
+              当前使用自定义模型: <code className="font-mono font-medium" style={{ color: '#f43f5e' }}>{selectedModel}</code>
+            </span>
+          </div>
+        )}
+
+        <div className="mt-3 flex items-center justify-center">
+          <a
+            href="https://lmstudio.ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-[10px] transition-colors"
+            style={{ color: 'var(--t-text-muted)' }}
+          >
+            了解更多关于 LM Studio
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OllamaSection() {
   const {
     selectedProvider, selectedModel, setSelectedProvider, setSelectedModel,
@@ -1094,6 +1507,9 @@ export function ModelsPage() {
 
           {/* vLLM Section */}
           <VLLMSection />
+
+          {/* LM Studio Section */}
+          <LMStudioSection />
 
           {/* Ollama Special Section */}
           <OllamaSection />

@@ -54,19 +54,43 @@ export function getTagColor(tag: string) {
 }
 
 // Split text into chunks with overlap
+// 防御性: 截断超长文本, 避免 V8 内部 Array 长度限制
+const MAX_INPUT_CHARS = 10_000_000; // 10MB
+const MAX_CHUNKS = 50_000; // 50k chunks 硬上限
+
 export function splitTextIntoChunks(
   text: string,
   chunkSize: number = 500,
   overlap: number = 50
 ): string[] {
+  // 1. 类型/数值防御
+  if (typeof text !== 'string') text = String(text ?? '');
+  if (!Number.isFinite(chunkSize) || chunkSize <= 0) chunkSize = 500;
+  if (!Number.isFinite(overlap) || overlap < 0) overlap = 0;
+  if (overlap >= chunkSize) overlap = Math.max(0, Math.floor(chunkSize - 1));
+
+  // 2. 长度防御: 截断到安全范围
+  if (text.length > MAX_INPUT_CHARS) {
+    console.warn(`splitTextIntoChunks: text too long (${text.length}), truncating to ${MAX_INPUT_CHARS}`);
+    text = text.slice(0, MAX_INPUT_CHARS);
+  }
+
+  // 3. 空文本短路
+  if (text.length === 0) return [];
+
   const chunks: string[] = [];
   let start = 0;
-
+  let safety = 0;
   while (start < text.length) {
     const end = Math.min(start + chunkSize, text.length);
     chunks.push(text.slice(start, end));
-    start = end - overlap;
-    if (start >= end) break;
+    const nextStart = end - overlap;
+    if (nextStart <= start || nextStart >= text.length) break;
+    start = nextStart;
+    if (++safety > MAX_CHUNKS) {
+      console.warn(`splitTextIntoChunks: hit MAX_CHUNKS (${MAX_CHUNKS}), breaking`);
+      break;
+    }
   }
 
   return chunks;

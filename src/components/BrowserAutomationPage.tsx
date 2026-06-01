@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Globe, Play, Camera, FileText, Download, Search, 
-  FormInput, MousePointer, ChevronDown, X, Clock,
-  RotateCcw, Save, Trash2, CheckCircle, AlertCircle
+  X, Clock, RotateCcw, CheckCircle, AlertCircle, Loader2
 } from 'lucide-react';
 import { 
   browserAutomationService, 
@@ -21,8 +20,11 @@ export function BrowserAutomationPage() {
   const [showScrapePanel, setShowScrapePanel] = useState(false);
   const [scrapeConfig, setScrapeConfig] = useState({ selector: '', multiple: false });
   const [scrapedData, setScrapedData] = useState<any>(null);
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
+  const [isScraping, setIsScraping] = useState(false);
   const [summary, setSummary] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -32,26 +34,47 @@ export function BrowserAutomationPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Refresh page data when active session changes
+  useEffect(() => {
+    if (!activeSessionId) {
+      setPageData(null);
+      setSummary('');
+      setScrapedData(null);
+      setScrapeError(null);
+      setError(null);
+      return;
+    }
+
+    const session = sessions.find(s => s.id === activeSessionId);
+    if (session && session.status === 'active') {
+      browserAutomationService.extractPageContent(activeSessionId)
+        .then(data => setPageData(data))
+        .catch(err => console.error('Failed to extract page content:', err));
+    }
+  }, [activeSessionId, sessions]);
+
   const handleNavigate = async () => {
     if (!url.trim()) return;
     
     setIsLoading(true);
+    setError(null);
     try {
       let session: BrowserSession;
       
       if (activeSessionId) {
-        await browserAutomationService.navigate(activeSessionId, url);
+        const success = await browserAutomationService.navigate(activeSessionId, url);
+        if (!success) throw new Error('导航失败');
         session = sessions.find(s => s.id === activeSessionId)!;
       } else {
         session = await browserAutomationService.createSession(url);
         setActiveSessionId(session.id);
       }
       
-      // Extract content after navigation
-      const data = await browserAutomationService.extractPageContent(session.id);
-      setPageData(data);
-    } catch (error) {
-      console.error('Navigation failed:', error);
+      setUrl(session.url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '导航失败';
+      setError(msg);
+      console.error('Navigation failed:', err);
     } finally {
       setIsLoading(false);
     }
@@ -62,13 +85,12 @@ export function BrowserAutomationPage() {
     
     try {
       const screenshot = await browserAutomationService.takeScreenshot(activeSessionId, { fullPage: true });
-      // Open screenshot in new window
       const img = new Image();
       img.src = screenshot;
       const w = window.open('', '_blank');
-      w?.document.write(img.outerHTML);
-    } catch (error) {
-      console.error('Screenshot failed:', error);
+      w?.document.write(`<html><head><title>Screenshot</title><style>body{margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;}img{max-width:100%;max-height:100vh;}</style></head><body>${img.outerHTML}</body></html>`);
+    } catch (err) {
+      console.error('Screenshot failed:', err);
     }
   };
 
@@ -77,28 +99,42 @@ export function BrowserAutomationPage() {
     
     try {
       const pdf = await browserAutomationService.generatePDF(activeSessionId);
-      const url = URL.createObjectURL(pdf);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `page-${Date.now()}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('PDF generation failed:', error);
+      const pdfUrl = URL.createObjectURL(pdf);
+      const w = window.open(pdfUrl, '_blank');
+      if (w) {
+        w.document.write(`<html><head><title>Print Page</title><style>@media print{body{margin:0;}}</style></head><body onload="window.print()"><p>如果未自动弹出打印对话框，请按 Ctrl+P 打印。</p></body></html>`);
+      }
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 5000);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
     }
   };
 
   const handleScrape = async () => {
-    if (!activeSessionId || !scrapeConfig.selector) return;
+    if (!activeSessionId) {
+      setScrapeError('请先访问一个网页');
+      return;
+    }
+    if (!scrapeConfig.selector.trim()) {
+      setScrapeError('请输入CSS选择器');
+      return;
+    }
     
+    setIsScraping(true);
+    setScrapeError(null);
+    setScrapedData(null);
     try {
       const data = await browserAutomationService.scrape(activeSessionId, {
         selector: scrapeConfig.selector,
         multiple: scrapeConfig.multiple,
       });
       setScrapedData(data);
-    } catch (error) {
-      console.error('Scraping failed:', error);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '抓取失败';
+      setScrapeError(msg);
+      setScrapedData(null);
+    } finally {
+      setIsScraping(false);
     }
   };
 
@@ -109,8 +145,8 @@ export function BrowserAutomationPage() {
     try {
       const result = await browserAutomationService.summarizePage(activeSessionId);
       setSummary(result);
-    } catch (error) {
-      console.error('Summarization failed:', error);
+    } catch (err) {
+      console.error('Summarization failed:', err);
     } finally {
       setIsSummarizing(false);
     }
@@ -121,15 +157,16 @@ export function BrowserAutomationPage() {
     
     setIsLoading(true);
     setIsSummarizing(true);
+    setError(null);
     try {
       const result = await browserAutomationService.searchAndSummarize('关键信息', url);
       setSummary(result.summary);
       
-      // Create session
       const session = await browserAutomationService.createSession(url);
       setActiveSessionId(session.id);
-    } catch (error) {
-      console.error('Search failed:', error);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '搜索失败';
+      setError(msg);
     } finally {
       setIsLoading(false);
       setIsSummarizing(false);
@@ -156,9 +193,20 @@ export function BrowserAutomationPage() {
           </div>
           <div>
             <h2 className="text-lg font-bold" style={{ color: 'var(--t-text)' }}>浏览器自动化</h2>
-            <p className="text-xs" style={{ color: 'var(--t-text-secondary)' }}>网页搜索、截图、数据抓取、表单填写</p>
+            <p className="text-xs" style={{ color: 'var(--t-text-secondary)' }}>网页抓取、内容提取、截图、数据抓取</p>
           </div>
         </div>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg p-3 animate-fade-in" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+            <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <span className="text-xs text-red-400">{error}</span>
+              <button onClick={() => setError(null)} className="text-red-400/60 hover:text-red-400 ml-2 text-xs">关闭</button>
+            </div>
+          </div>
+        )}
 
         {/* URL Input */}
         <div className="flex gap-3">
@@ -179,7 +227,7 @@ export function BrowserAutomationPage() {
             style={{ color: 'var(--t-text)' }}
           >
             {isLoading ? (
-              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Play className="h-4 w-4" />
             )}
@@ -234,10 +282,13 @@ export function BrowserAutomationPage() {
                 <div className="flex items-center gap-2 mt-2">
                   <span className={`w-2 h-2 rounded-full ${
                     session.status === 'active' ? 'bg-green-400' : 
-                    session.status === 'loading' ? 'bg-amber-400 animate-pulse' : 'bg-gray-400'
+                    session.status === 'loading' ? 'bg-amber-400 animate-pulse' : 
+                    session.status === 'error' ? 'bg-red-400' : 'bg-gray-400'
                   }`} />
                   <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
-                    {session.status === 'active' ? '活跃' : session.status === 'loading' ? '加载中' : '空闲'}
+                    {session.status === 'active' ? '活跃' : 
+                     session.status === 'loading' ? '加载中' : 
+                     session.status === 'error' ? '错误' : '空闲'}
                   </span>
                 </div>
               </div>
@@ -256,6 +307,17 @@ export function BrowserAutomationPage() {
         <div className="flex-1 p-6 overflow-y-auto">
           {activeSession ? (
             <div className="space-y-6">
+              {/* Session Status */}
+              <div className="flex items-center gap-3">
+                <span className={`w-3 h-3 rounded-full ${
+                  activeSession.status === 'active' ? 'bg-green-400' : 
+                  activeSession.status === 'loading' ? 'bg-amber-400 animate-pulse' : 
+                  activeSession.status === 'error' ? 'bg-red-400' : 'bg-gray-400'
+                }`} />
+                <span className="text-sm" style={{ color: 'var(--t-text)' }}>{activeSession.title}</span>
+                <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{activeSession.url}</span>
+              </div>
+
               {/* Toolbar */}
               <div className="flex flex-wrap gap-2">
                 <button
@@ -286,12 +348,12 @@ export function BrowserAutomationPage() {
                 </button>
                 <button
                   onClick={handleSummarize}
-                  disabled={isSummarizing}
+                  disabled={isSummarizing || activeSession.status !== 'active'}
                   className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors flex items-center gap-2 text-sm disabled:opacity-50"
                   style={{ color: 'var(--t-text)' }}
                 >
                   {isSummarizing ? (
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Search className="h-4 w-4" />
                   )}
@@ -306,12 +368,13 @@ export function BrowserAutomationPage() {
                   <div className="flex gap-3 mb-3">
                     <input
                       value={scrapeConfig.selector}
-                      onChange={e => setScrapeConfig({ ...scrapeConfig, selector: e.target.value })}
+                      onChange={e => { setScrapeConfig({ ...scrapeConfig, selector: e.target.value }); setScrapeError(null); }}
+                      onKeyDown={e => e.key === 'Enter' && handleScrape()}
                       className="flex-1 glass-input rounded-lg py-2 px-3 text-sm"
-                      placeholder="CSS 选择器 (例如: .product-title, #price)..."
+                      placeholder="CSS 选择器 (例如: h1, .product-title, a)..."
                       style={{ color: 'var(--t-text)' }}
                     />
-                    <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer shrink-0" style={{ color: 'var(--t-text-secondary)' }}>
                       <input
                         type="checkbox"
                         checked={scrapeConfig.multiple}
@@ -322,16 +385,31 @@ export function BrowserAutomationPage() {
                     </label>
                     <button
                       onClick={handleScrape}
-                      className="px-4 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm"
+                      disabled={isScraping}
+                      className="px-4 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm disabled:opacity-50 flex items-center gap-2"
                     >
-                      抓取
+                      {isScraping ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      {isScraping ? '抓取中...' : '抓取'}
                     </button>
                   </div>
                   
+                  {scrapeError && (
+                    <div className="mb-3 flex items-start gap-2 rounded-lg p-2.5 animate-fade-in" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                      <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                      <span className="text-xs text-red-400">{scrapeError}</span>
+                    </div>
+                  )}
+
                   {scrapedData && (
                     <div className="mt-3 p-3 rounded-lg bg-black/20">
-                      <h5 className="text-xs font-medium mb-2" style={{ color: 'var(--t-text-muted)' }}>抓取结果:</h5>
-                      <pre className="text-xs overflow-auto" style={{ color: 'var(--t-text-secondary)' }}>
+                      <h5 className="text-xs font-medium mb-2" style={{ color: 'var(--t-text-muted)' }}>
+                        抓取结果 ({Array.isArray(scrapedData) ? scrapedData.length : 1} 条):
+                      </h5>
+                      <pre className="text-xs overflow-auto max-h-64" style={{ color: 'var(--t-text-secondary)' }}>
                         {JSON.stringify(scrapedData, null, 2)}
                       </pre>
                     </div>
@@ -346,7 +424,7 @@ export function BrowserAutomationPage() {
                     <CheckCircle className="h-4 w-4 text-green-400" />
                     页面总结
                   </h4>
-                  <div className="text-sm whitespace-pre-wrap" style={{ color: 'var(--t-text-secondary)' }}>
+                  <div className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--t-text-secondary)' }}>
                     {summary}
                   </div>
                 </div>
@@ -358,28 +436,65 @@ export function BrowserAutomationPage() {
                   <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--t-text)' }}>页面信息</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex">
-                      <span className="w-20" style={{ color: 'var(--t-text-muted)' }}>标题:</span>
+                      <span className="w-20 shrink-0" style={{ color: 'var(--t-text-muted)' }}>标题:</span>
                       <span style={{ color: 'var(--t-text)' }}>{pageData.title}</span>
                     </div>
                     <div className="flex">
-                      <span className="w-20" style={{ color: 'var(--t-text-muted)' }}>URL:</span>
-                      <span style={{ color: 'var(--t-accent-light)' }}>{pageData.url}</span>
+                      <span className="w-20 shrink-0" style={{ color: 'var(--t-text-muted)' }}>URL:</span>
+                      <span className="break-all" style={{ color: 'var(--t-accent-light)' }}>{pageData.url}</span>
                     </div>
                     {pageData.meta.description && (
                       <div className="flex">
-                        <span className="w-20" style={{ color: 'var(--t-text-muted)' }}>描述:</span>
+                        <span className="w-20 shrink-0" style={{ color: 'var(--t-text-muted)' }}>描述:</span>
                         <span style={{ color: 'var(--t-text-secondary)' }}>{pageData.meta.description}</span>
                       </div>
                     )}
+                    {pageData.meta.author && (
+                      <div className="flex">
+                        <span className="w-20 shrink-0" style={{ color: 'var(--t-text-muted)' }}>作者:</span>
+                        <span style={{ color: 'var(--t-text)' }}>{pageData.meta.author}</span>
+                      </div>
+                    )}
+                    {pageData.meta.keywords && pageData.meta.keywords.length > 0 && (
+                      <div className="flex">
+                        <span className="w-20 shrink-0" style={{ color: 'var(--t-text-muted)' }}>关键词:</span>
+                        <span style={{ color: 'var(--t-text-secondary)' }}>{pageData.meta.keywords.join(', ')}</span>
+                      </div>
+                    )}
                     <div className="flex">
-                      <span className="w-20" style={{ color: 'var(--t-text-muted)' }}>链接数:</span>
+                      <span className="w-20 shrink-0" style={{ color: 'var(--t-text-muted)' }}>链接数:</span>
                       <span style={{ color: 'var(--t-text)' }}>{pageData.links.length}</span>
                     </div>
                     <div className="flex">
-                      <span className="w-20" style={{ color: 'var(--t-text-muted)' }}>图片数:</span>
+                      <span className="w-20 shrink-0" style={{ color: 'var(--t-text-muted)' }}>图片数:</span>
                       <span style={{ color: 'var(--t-text)' }}>{pageData.images.length}</span>
                     </div>
+                    {pageData.content && (
+                      <div className="mt-3">
+                        <span className="text-xs font-medium" style={{ color: 'var(--t-text-muted)' }}>内容预览:</span>
+                        <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--t-text-secondary)' }}>
+                          {pageData.content.slice(0, 500)}...
+                        </p>
+                      </div>
+                    )}
                   </div>
+                </div>
+              )}
+
+              {/* Loading state */}
+              {activeSession.status === 'loading' && (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin mb-4" style={{ color: 'var(--t-accent-light)' }} />
+                  <p className="text-sm" style={{ color: 'var(--t-text-secondary)' }}>正在加载页面内容...</p>
+                </div>
+              )}
+
+              {/* Error state */}
+              {activeSession.status === 'error' && (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <AlertCircle className="h-8 w-8 mb-4 text-red-400" />
+                  <p className="text-sm mb-2" style={{ color: 'var(--t-text)' }}>页面加载失败</p>
+                  <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{activeSession.title}</p>
                 </div>
               )}
             </div>
@@ -392,7 +507,7 @@ export function BrowserAutomationPage() {
                 浏览器自动化
               </h3>
               <p className="text-sm max-w-md" style={{ color: 'var(--t-text-secondary)' }}>
-                输入网址开始自动化操作。支持网页截图、PDF生成、数据抓取、表单填写等功能。
+                输入网址开始自动化操作。支持网页内容提取、截图、数据抓取等功能。
               </p>
             </div>
           )}
@@ -417,13 +532,18 @@ export function BrowserAutomationPage() {
                   ) : task.status === 'failed' ? (
                     <AlertCircle className="h-3 w-3 text-red-400" />
                   ) : (
-                    <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    <Loader2 className="h-3 w-3 text-amber-400 animate-spin" />
                   )}
                   <span style={{ color: 'var(--t-text)' }}>{task.type}</span>
                 </div>
                 <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
                   {task.completedAt ? new Date(task.completedAt).toLocaleTimeString() : '进行中'}
                 </div>
+                {task.error && (
+                  <div className="text-[10px] text-red-400/70 mt-1 truncate" title={task.error}>
+                    {task.error}
+                  </div>
+                )}
               </div>
             ))}
           </div>

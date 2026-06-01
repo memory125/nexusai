@@ -9,13 +9,14 @@
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Tauri](https://img.shields.io/badge/Tauri-2-FFC131?style=for-the-badge&logo=tauri&logoColor=black)](https://tauri.app/)
+[![Zustand](https://img.shields.io/badge/Zustand-5-443E38?style=for-the-badge&logo=react&logoColor=white)](https://github.com/pmndrs/zustand)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](./LICENSE)
 
 <br />
 
-**NexusAI** 是一款现代化的 AI 大模型聚合工作台，集成 9 家模型厂商、**RAG 知识库系统**、**MCP 工具服务**、**插件系统**、**多模态支持**，支持**桌面端应用打包**（Windows/macOS/Linux），采用精美的毛玻璃（Glassmorphism）UI 设计。
+**NexusAI** 是一款现代化的 AI 大模型聚合工作台，集成 **9 大模型厂商**、**14 个搜索引擎**、**RAG 知识库系统**、**MCP 工具服务**、**智能浏览器自动化**、**插件系统**、**多模态支持**，支持**桌面端应用打包**（Windows/macOS/Linux），采用精美的毛玻璃（Glassmorphism）UI 设计。
 
-> 🔥 **最新更新 v1.7.0**: 新增 **对话文件夹分类**、**对话置顶**、**对话搜索**、**对话评分**、**对话导出**、**TTS语音输出**、**快捷键系统**、**对话模板**、**团队权限管理**、**主题预览**！
+> 🔥 **最新更新 v1.8.0**: 新增 🔍 **14 搜索引擎智能检索**、🌐 **智能浏览器自动化**、🧠 **160+ Agents & 100+ Skills**、🎯 **9 嵌入模型**（Ollama / Jina / OpenAI / HuggingFace）、🛡️ **配置持久化**、🖼️ **13 主题 + 白色加粗预览模态**、🦙 **Ollama/LM Studio/vLLM 完整本地化**！
 
 <br />
 
@@ -23,7 +24,10 @@
 [🚀 快速开始](#-快速开始) •
 [📦 桌面应用](#-桌面应用) •
 [🧠 RAG知识库](#-rag知识库系统) •
+[🔍 智能搜索](#-智能搜索系统) •
+[🌐 浏览器自动化](#-浏览器自动化) •
 [🔀 工作流编排](#-工作流编排系统) •
+[🤖 Agents & Skills](#-agents--skills) •
 [🔌 MCP服务](#-mcp-model-context-protocol) •
 [🔧 插件系统](#-插件系统) •
 [🎤 多模态支持](#-多模态支持) •
@@ -54,23 +58,61 @@
 - ⌨️ **快捷键系统** - 可自定义键盘快捷键
 - 📋 **对话模板** - 预设提示词模板，快速开始对话
 - 👥 **团队权限** - 知识库和模板的细粒度权限管理
-- 🎨 **主题预览** - 切换前预览深色/浅色主题效果
+- 🎨 **主题预览** - 切换前预览主题效果（白色加粗文字保证清晰）
+- 🛑 **流式中断** - 随时停止 AI 生成
 
-### 📚 RAG 知识库系统
+### 🤖 Agents & Skills (v1.8.0)
 
-**完整版 v1.4.0+**：检索增强生成（RAG）解决方案
+**160+ 内置 AI Agent + 100+ Skill**，覆盖各行各业：
+
+- 📂 **分类齐全** - 创意、技术、分析、语言、产品、专业、设计、学术、医疗、法律、金融、教育、科技、农业、手工艺术等
+- 🎯 **专业领域** - 每个 Agent 都有专属系统提示词 + 推荐技能组合
+- ⚡ **Skill 分类** - 信息获取、写作辅助、编程开发、数据分析、创意设计、生活服务、商务工作、学习教育等
+- 🛠️ **Skill 执行器** - 12 个真实外部 API 集成（网络搜索、新闻、计算器、字典、维基百科、天气、汇率、代码搜索、图片生成等）
+- 🔌 **可扩展** - 支持用户自定义 Agent 和 Skill，永久保存
+
+### 🧠 RAG 知识库系统
+
+**完整版 v1.4.0+**，**v1.8.0 性能/可用性大幅升级**：
 
 | 功能 | 描述 |
 |------|------|
 | 📄 **文档上传** | 支持 PDF、Word、Excel、TXT、Markdown 格式 |
 | ✂️ **智能分块** | 自动文本分割，可配置块大小和重叠度 |
-| 🧮 **Embedding** | 支持 OpenAI、HuggingFace、本地 Embedding 模型 |
+| 🌐 **URL 导入** | 一键抓取网页内容（CORS 代理 + Jina Reader 优先） |
+| 🧮 **9 嵌入模型** | Ollama (nomic/mxbai/MiniLM) / OpenAI (3-small/3-large/ada) / Jina v3 / HuggingFace / 本地 hash fallback |
 | 🔍 **向量检索** | HNSW 向量索引，余弦相似度匹配 |
 | 🏷️ **标签管理** | 知识库分类标签，支持筛选和批量操作 |
 | 🔗 **多库联合** | 支持同时检索多个知识库 |
 | 📊 **性能统计** | 实时显示检索耗时、Token 使用量 |
 | 👁️ **文档预览** | 查看原始内容和分块详情 |
-| ⚡ **性能优化** | Web Worker + HNSW 向量索引，毫秒级检索 |
+| ⚡ **Web Worker** | 检索计算在 Worker 线程，不阻塞 UI |
+| 🛡️ **容错处理** | 单块嵌入失败自动降级，文档过大自动截断 |
+
+### 🔍 智能搜索系统 (v1.8.0)
+
+**14 个真实搜索引擎**，全部可调用：
+
+| 类别 | 引擎 |
+|------|------|
+| 🌐 **通用搜索** | DuckDuckGo, Brave, Bing, Google CSE, SearXNG |
+| 📚 **知识库** | Wikipedia, OpenLibrary, arXiv 学术论文 |
+| 💻 **开发者** | StackOverflow, GitHub, npm Registry |
+| 📰 **资讯社区** | HackerNews, Reddit |
+| 🎨 **多媒体** | (内置图片生成) |
+| 🤖 **AI 聚合** | 智能多引擎并行 + 去重排序 |
+
+- 📋 **引擎选择器** - 可勾选启用哪些引擎，结果并集去重
+- 💬 **发送到对话** - 搜索结果一键插入当前对话
+- 💾 **历史记录** - 智能搜索历史自动保存
+- 🔄 **实时抓取** - 无需 API Key 也能用的引擎优先
+
+### 🌐 浏览器自动化 (v1.8.0)
+
+- 🌐 **Web 抓取** - 自动访问 URL、提取内容
+- 🤖 **智能操作** - 元素定位、表单填写、点击
+- 📸 **截图支持** - 自动化过程中截图
+- 📋 **任务编排** - 多步骤浏览器任务流
 
 ### 🔀 工作流编排系统
 
@@ -84,16 +126,7 @@
 | ▶️ **一键运行** | 立即执行工作流 |
 | 📊 **执行日志** | 实时查看运行状态和输出 |
 
-**内置模板**：
-- 文档问答助手
-- 智能客服分流
-- 内容生成器
-- 代码审查助手
-- 文档数据提取
-- 会议总结助手
-- 多知识库问答
-- 单元测试生成
-- API 文档生成
+**内置模板**：文档问答助手、智能客服分流、内容生成器、代码审查助手、文档数据提取、会议总结助手、多知识库问答、单元测试生成、API 文档生成...
 
 ### 🔌 MCP (Model Context Protocol)
 
@@ -134,11 +167,7 @@
 | ⚡ **热插拔** | 无需重启启用/禁用 |
 | 🎣 **Hook 机制** | 8 种事件钩子 |
 
-**可用 Hooks**：
-- `before-message-send` / `after-message-receive`
-- `on-conversation-start` / `on-conversation-end`
-- `on-plugin-load` / `on-plugin-unload`
-- `on-theme-change` / `on-settings-change`
+**可用 Hooks**：`before-message-send` / `after-message-receive` / `on-conversation-start` / `on-conversation-end` / `on-plugin-load` / `on-plugin-unload` / `on-theme-change` / `on-settings-change`
 
 ### 🎤 多模态支持
 
@@ -156,21 +185,6 @@
 - 文件大小限制（按类型）
 - 语音录制（Web API）
 
-### 🤖 智能 Agents
-
-内置 **8 个专业 AI Agent**：
-
-| Agent | 描述 | 类别 |
-|-------|------|------|
-| ✍️ 创意写作助手 | 文章、故事、广告文案创作 | 创意 |
-| 💻 代码专家 | 全栈开发、代码审查与重构 | 技术 |
-| 📊 数据分析师 | 数据可视化与统计分析 | 分析 |
-| 🌍 多语言翻译 | 专业文档和实时翻译 | 语言 |
-| 📋 产品经理 | PRD撰写、需求分析、产品规划 | 产品 |
-| ⚖️ 法律顾问 | 合同审查、法规解读 | 专业 |
-| 🎨 UI/UX 设计师 | 界面设计建议与设计系统 | 设计 |
-| 🔬 学术研究 | 论文分析、文献综述 | 学术 |
-
 ### 🧠 模型厂商支持
 
 支持 **9 大模型厂商**，超过 **65+ 个模型**（2025-2026 最新版）：
@@ -186,6 +200,7 @@
 | 🔷 DeepSeek | **DeepSeek-V3.2**, **DeepSeek-R1** | ☁️ 云端 |
 | 🦙 Ollama | Llama 3.3, Qwen 2.5/3, DeepSeek R1/V3, Mistral, Phi-4 等 | 🏠 本地 |
 | ⚡ vLLM | Llama 3.1/3.3, Qwen 2.5/3, DeepSeek V3/R1, Phi-4 等 | 🏠 本地 |
+| 💡 LM Studio | 任何 GGUF 模型 (OpenAI 兼容协议) | 🏠 本地 |
 
 ### 🖥️ 桌面应用
 
@@ -205,6 +220,15 @@
 - 精细的页面过渡动画（淡入、上滑、悬浮提升）
 - **13 套精美主题**（7 深色 + 6 浅色）
 - 📱 响应式设计，支持移动端适配
+- 🦊 **Nexi 紫色猫咪机器人**吉祥物 + 呼吸动画
+- ⌨️ **打字动画** 加载指示
+
+### 💾 数据持久化 (v1.8.0)
+
+- 🗄️ **Zustand + localStorage** - 所有配置自动保存
+- 📂 **会话、文件夹、Agents、Skills、激活状态** 全部持久化
+- 🔄 **Quota 容错** - 存储满时自动清理智能搜索历史后重试
+- 🎛️ **可配置持久化键** - 版本号管理，兼容升级
 
 ---
 
@@ -220,7 +244,7 @@
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/your-username/nexusai.git
+git clone https://github.com/memory125/nexusai.git
 cd nexusai
 
 # 2. 安装依赖
@@ -239,11 +263,20 @@ npm run build:mac-arm  # macOS Apple Silicon
 npm run build:linux    # Linux
 ```
 
+### 配置 API Key
+
+首次启动后，进入 **设置 → API 密钥** 配置你使用的模型厂商：
+
+- **云端模型**：填入对应厂商的 API Key
+- **本地模型 (Ollama)**：确保 Ollama 服务运行在 `http://localhost:11434`
+- **本地模型 (LM Studio)**：确保 LM Studio 启动 OpenAI 兼容服务（默认端口 1234）
+- **本地模型 (vLLM)**：启动 vLLM OpenAI 兼容服务
+
 ---
 
 ## 📦 桌面应用
 
-访问 [Releases](https://github.com/your-username/nexusai/releases) 下载最新版本。
+访问 [Releases](https://github.com/memory125/nexusai/releases) 下载最新版本。
 
 ---
 
@@ -253,9 +286,92 @@ npm run build:linux    # Linux
 
 1. **创建知识库**: 知识库页面 → 新建知识库 → 输入名称/描述/标签
 2. **上传文档**: 支持 PDF、Word、Excel、TXT、Markdown
-3. **配置 Embedding**: 选择 OpenAI/HuggingFace/本地模型
-4. **使用知识库**: 单库检索或多库联合检索
-5. **查看结果**: 展开「检索来源」查看相似度和性能统计
+3. **URL 导入** (v1.8.0): 粘贴网址，自动抓取内容（带 6 套 CORS 代理 fallback）
+4. **配置 Embedding**: 选择 OpenAI/HuggingFace/Ollama/Jina/本地模型
+5. **测试连接** (v1.8.0): 一键验证嵌入服务是否正常（显示维度+耗时+向量样本）
+6. **使用知识库**: 单库检索或多库联合检索
+7. **查看结果**: 展开「检索来源」查看相似度和性能统计
+
+### 嵌入模型 (v1.8.0 新增 9 种)
+
+| 模型 ID | 来源 | 维度 | 备注 |
+|---------|------|------|------|
+| `ollama-nomic-embed-text` | Ollama | 768 | 默认推荐 |
+| `ollama-mxbai-embed-large` | Ollama | 1024 | 高质量 |
+| `ollama-all-minilm` | Ollama | 384 | 轻量 |
+| `text-embedding-3-small` | OpenAI | 1536 | |
+| `text-embedding-3-large` | OpenAI | 3072 | |
+| `text-embedding-ada-002` | OpenAI | 1536 | 旧版 |
+| `jina-embeddings-v3` | Jina AI | 1024 | 多语言 |
+| `sentence-transformers/all-MiniLM-L6-v2` | HuggingFace | 384 | |
+| `simple-hash` | 本地 | 256 | 离线 fallback |
+
+---
+
+## 🔍 智能搜索系统
+
+### 使用步骤
+
+1. 进入 **智能搜索** 页面
+2. 输入查询关键词
+3. 勾选要使用的搜索引擎（默认 5 个：DDG/Wikipedia/StackOverflow/GitHub/HackerNews）
+4. 点击搜索，结果自动并行抓取并去重
+5. 点击「发送到对话」可将结果插入当前会话
+
+### 14 个引擎
+
+🌐 **通用**：DuckDuckGo, Brave, Bing, Google CSE, SearXNG
+📚 **学术**：Wikipedia, arXiv, OpenLibrary
+💻 **开发者**：StackOverflow, GitHub, npm
+📰 **社区**：HackerNews, Reddit
+
+---
+
+## 🌐 浏览器自动化
+
+进入 **浏览器自动化** 页面，可：
+- 自动访问指定 URL
+- 提取页面内容（标题、正文、链接）
+- 模拟点击、滚动、输入
+- 截图保存
+- 链式任务流
+
+---
+
+## 🤖 Agents & Skills
+
+### 内置 160+ Agent
+
+按 20+ 行业分类：创意、技术、分析、语言、产品、设计、学术、医疗、法律、金融、教育、科技、农业、手工艺术等
+
+### 内置 100+ Skill
+
+按 10+ 类别：信息获取、写作辅助、编程开发、数据分析、创意设计、生活服务、商务工作、学习教育等
+
+### 自定义 Agent/Skill
+
+1. Agent/Skill 页面 → 点击「新建」
+2. 填写名称、图标、分类、systemPrompt、推荐技能
+3. 自动保存到本地，永久可用
+
+### Skill 执行器 (v1.8.0)
+
+12 个真实外部 API 集成，自动在对话中调用：
+
+| Skill | 真实功能 |
+|-------|----------|
+| `web-search` | 实时网络搜索 |
+| `news-aggregator` | 新闻头条聚合 |
+| `academic-search` | arXiv 学术搜索 |
+| `wikipedia` | 维基百科查询 |
+| `dictionary` | 词典查词 |
+| `weather` | 天气查询 |
+| `currency-converter` | 汇率换算 |
+| `calculator` | 数学计算 |
+| `code-search` | 代码搜索 |
+| `web-fetch` | 网页抓取 |
+| `image-generation` | AI 图片生成 |
+| `datetime` | 时区时间 |
 
 ---
 
@@ -303,10 +419,52 @@ npm run build:linux    # Linux
 
 ---
 
+## 🎨 主题系统
+
+### 13 套精选主题
+
+**7 套深色主题**：
+- 🌌 午夜星空 (Midnight) - 默认
+- 🌊 极光幻境 (Aurora)
+- 🌅 日落余晖 (Sunset)
+- 🌊 深海幽蓝 (Ocean)
+- 🌲 翡翠森林 (Forest)
+- 🌹 玫瑰金粉 (Rose)
+- 🤖 赛博朋克 (Cyberpunk)
+
+**6 套浅色主题**：
+- ☀️ 清晨白昼 (Light)
+- 💜 薰衣草田 (Light Lavender)
+- 🍑 蜜桃暖阳 (Light Peach)
+- 🌿 薄荷清风 (Light Mint)
+- 🌤️ 晴空万里 (Light Sky)
+- 🏜️ 沙漠暮色 (Light Sand)
+
+### 主题预览 (v1.8.0)
+
+点击主题卡片 → 弹出**白色加粗预览模态**：
+- 🖼️ 大尺寸模拟 UI 预览
+- 🎨 显示主色调和背景色 hex 值
+- 🏷️ 主题名称和描述
+- ✓ 取消 / ⚡ 应用主题 按钮
+
+预览模态采用**深色不透明背景**（`rgba(20,20,30,0.95)`），保证白色文字在所有主题下都清晰可读。
+
+### 字体清晰度保障 (v1.8.0)
+
+- ✅ **全局兜底层** - 硬编码 `text-gray-400` 等低对比度 utility 自动映射到主题变量
+- ✅ **属性选择器** - 避免 Tailwind 4 转义类名解析问题
+- ✅ **`!important` 击赢** - 覆盖 Tailwind utility 源顺序
+- ✅ **占位符样式** - input/textarea placeholder 统一主题色
+- ✅ **语义色保留** - 绿/红等状态指示色在亮主题下自动加深
+
+---
+
 ## 📜 版本历史
 
 | 版本 | 日期 | 更新内容 |
 |------|------|----------|
+| **v1.8.0** | 2026-06 | 🔍 **14 引擎智能搜索**、🌐 **浏览器自动化**、🧠 **160+ Agents & 100+ Skills**、🎯 **9 嵌入模型**（Ollama/Jina）、🛡️ **配置持久化**、🖼️ **白色加粗主题预览**、🦙 **Ollama/LM Studio/vLLM 完整本地化**、🌍 **字体清晰度全面保障** |
 | **v1.7.0** | 2026-02 | 📁 **对话文件夹分类**、📌 **对话置顶**、🔎 **对话搜索**、👍👎 **对话评分**、📤 **对话导出**、🔊 **TTS语音输出**、⌨️ **快捷键系统**、📋 **对话模板**、👥 **团队权限管理**、🎨 **主题预览** |
 | **v1.6.0** | 2026-02 | 🔀 **工作流编排系统**、🔌 **MCP 扩展至 34+ 服务器**、⚡ **RAG 性能优化**（Web Worker + HNSW） |
 | **v1.5.0** | 2026-02 | 🔌 **MCP 支持**、🔧 **插件系统**、🎤 **多模态支持** |
@@ -318,14 +476,55 @@ npm run build:linux    # Linux
 
 ---
 
+## 🏗️ 技术栈
+
+| 类别 | 技术 |
+|------|------|
+| **前端框架** | React 19 + TypeScript 5.9 |
+| **构建工具** | Vite 7 |
+| **样式方案** | Tailwind CSS 4 + Glassmorphism |
+| **状态管理** | Zustand 5 (含 localStorage 持久化) |
+| **桌面框架** | Tauri 2 (Rust) |
+| **图标库** | Lucide React |
+| **MCP 协议** | @modelcontextprotocol/sdk |
+| **向量检索** | HNSW + Web Worker |
+| **代码分割** | 路由级 + 组件级 lazy loading |
+
+---
+
+## 🐛 已知问题 / 限制
+
+- 部分国内大模型 API 需要特殊网络环境
+- 飞书/微信等严格反爬网站 URL 导入可能失败
+- 14 个搜索引擎中部分需 API Key（Brave/Google/SearXNG）
+- 浏览器自动化基于 Puppeteer，大型网站性能依赖网络
+
+---
+
 ## 📄 开源协议
 
 本项目基于 [MIT License](./LICENSE) 开源。
+
+---
+
+## 🙏 致谢
+
+- [React](https://react.dev/) - 用户界面框架
+- [Tauri](https://tauri.app/) - 跨平台桌面框架
+- [Tailwind CSS](https://tailwindcss.com/) - 实用优先 CSS 框架
+- [Vite](https://vitejs.dev/) - 下一代前端构建工具
+- [Zustand](https://github.com/pmndrs/zustand) - 简洁的状态管理
+- [Lucide](https://lucide.dev/) - 精美图标库
+- [Model Context Protocol](https://modelcontextprotocol.io/) - 工具调用协议
+
+---
 
 <div align="center">
 
 **如果这个项目对你有帮助，请给一个 ⭐ Star！**
 
 Made with ❤️ by NexusAI Team
+
+[⬆ 回到顶部](#-nexusai)
 
 </div>

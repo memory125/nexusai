@@ -22,7 +22,8 @@ export class LLMService {
   }
 
   async *streamChatCompletion(
-    request: ChatCompletionRequest
+    request: ChatCompletionRequest,
+    signal?: AbortSignal
   ): AsyncGenerator<string> {
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -34,6 +35,7 @@ export class LLMService {
         ...request,
         stream: true,
       }),
+      signal,
     });
 
     if (!response.ok) {

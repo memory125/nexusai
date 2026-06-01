@@ -33,7 +33,7 @@ export interface SearchOptions {
   includeNews?: boolean;
 }
 
-export type SearchEngine = 'brave' | 'bing' | 'duckduckgo' | 'searxng' | 'google';
+export type SearchEngine = 'brave' | 'bing' | 'duckduckgo' | 'searxng' | 'google' | 'wikipedia' | 'stackoverflow' | 'github' | 'hackernews' | 'reddit' | 'npm' | 'openlibrary' | 'arxiv';
 
 export interface SearchHistoryItem {
   id: string;
@@ -65,6 +65,7 @@ interface SearchResponse {
 
 export class IntelligentSearchService {
   private apiKeys: Record<string, string> = {};
+  private GOOGLE_CX = '017576662512468239146:omuauf_gy68';
   private searchHistory: SearchHistoryItem[] = [];
   private maxHistoryItems = 100;
   private memoryCache: Map<string, CacheEntry<any>> = new Map();
@@ -109,7 +110,7 @@ export class IntelligentSearchService {
   async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
     const startTime = Date.now();
     const {
-      engines = ['brave', 'duckduckgo'],
+      engines = ['duckduckgo', 'wikipedia', 'stackoverflow', 'github', 'hackernews'],
       maxResults = 10,
     } = options;
 
@@ -165,6 +166,22 @@ export class IntelligentSearchService {
         return this.searchSearXNG(query);
       case 'google':
         return this.searchGoogle(query);
+      case 'wikipedia':
+        return this.searchWikipedia(query);
+      case 'stackoverflow':
+        return this.searchStackOverflow(query);
+      case 'github':
+        return this.searchGithub(query);
+      case 'hackernews':
+        return this.searchHackerNews(query);
+      case 'reddit':
+        return this.searchReddit(query);
+      case 'npm':
+        return this.searchNpm(query);
+      case 'openlibrary':
+        return this.searchOpenLibrary(query);
+      case 'arxiv':
+        return this.searchArxiv(query);
       default:
         return [];
     }
@@ -172,7 +189,8 @@ export class IntelligentSearchService {
 
   private async searchBrave(query: string): Promise<SearchResult[]> {
     if (!this.apiKeys.brave) {
-      return this.generateMockResults(query, 'brave');
+      console.info('Brave search skipped: no API key configured');
+      return [];
     }
 
     const params = new URLSearchParams({ q: query, count: '20', offset: '0' });
@@ -182,6 +200,7 @@ export class IntelligentSearchService {
         'X-Subscription-Token': this.apiKeys.brave,
         'Accept': 'application/json',
       },
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) throw new Error(`Brave search failed: ${response.status}`);
@@ -201,7 +220,8 @@ export class IntelligentSearchService {
 
   private async searchBing(query: string): Promise<SearchResult[]> {
     if (!this.apiKeys.bing) {
-      return this.generateMockResults(query, 'bing');
+      console.info('Bing search skipped: no API key configured');
+      return [];
     }
 
     const response = await fetch(
@@ -225,11 +245,92 @@ export class IntelligentSearchService {
   }
 
   private async searchDuckDuckGo(query: string): Promise<SearchResult[]> {
-    return this.generateMockResults(query, 'duckduckgo').map(r => ({
-      ...r,
-      source: 'duckduckgo',
-      relevanceScore: 0.7,
-    }));
+    try {
+      const res = await fetch(
+        `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+        {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) NexusAI/1.0' },
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      if (!res.ok) throw new Error(`DDG HTTP ${res.status}`);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const items: SearchResult[] = [];
+      const resultNodes = doc.querySelectorAll('div.result, div.results_links, div.web-result');
+      resultNodes.forEach((node, i) => {
+        if (i >= 15) return;
+        const titleEl = node.querySelector('a.result__a, h2 a, a.result-link');
+        const snippetEl = node.querySelector('.result__snippet, .result-snippet, a.result__snippet');
+        if (!titleEl) return;
+        let href = titleEl.getAttribute('href') || '';
+        const uddg = href.match(/uddg=([^&]+)/);
+        if (uddg) {
+          try { href = decodeURIComponent(uddg[1]); } catch { /* keep original */ }
+        }
+        if (!href.startsWith('http')) return;
+        const title = (titleEl.textContent || '').trim();
+        const snippet = (snippetEl?.textContent || '').trim();
+        if (!title) return;
+        try {
+          const domain = new URL(href).hostname;
+          items.push({
+            id: `ddg_${href}`,
+            title,
+            url: href,
+            snippet: snippet || title,
+            source: 'duckduckgo',
+            relevanceScore: 0.75,
+            domain,
+          });
+        } catch { /* skip invalid URL */ }
+      });
+      if (items.length === 0) throw new Error('DDG returned no parseable results');
+      return items;
+    } catch (e) {
+      console.warn('DuckDuckGo HTML search failed, falling back to lite API:', e);
+      try {
+        const lite = await fetch(
+          `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
+          { signal: AbortSignal.timeout(8000) }
+        );
+        if (!lite.ok) throw new Error(`DDG lite ${lite.status}`);
+        const data = await lite.json();
+        const out: SearchResult[] = [];
+        if (data.AbstractText && data.AbstractURL) {
+          out.push({
+            id: `ddg_abs_${data.AbstractURL}`,
+            title: data.Heading || data.AbstractSource || query,
+            url: data.AbstractURL,
+            snippet: data.AbstractText,
+            source: 'duckduckgo',
+            relevanceScore: 0.9,
+            domain: new URL(data.AbstractURL).hostname,
+          });
+        }
+        if (Array.isArray(data.RelatedTopics)) {
+          for (const t of data.RelatedTopics.slice(0, 10)) {
+            if (t.Text && t.FirstURL) {
+              try {
+                out.push({
+                  id: `ddg_rt_${t.FirstURL}`,
+                  title: t.Text.split(' - ')[0] || t.Text.slice(0, 80),
+                  url: t.FirstURL,
+                  snippet: t.Text,
+                  source: 'duckduckgo',
+                  relevanceScore: 0.65,
+                  domain: new URL(t.FirstURL).hostname,
+                });
+              } catch { /* skip */ }
+            }
+          }
+        }
+        return out;
+      } catch (inner) {
+        console.warn('DDG lite also failed:', inner);
+        return [];
+      }
+    }
   }
 
   private async searchSearXNG(query: string): Promise<SearchResult[]> {
@@ -237,7 +338,9 @@ export class IntelligentSearchService {
     const params = new URLSearchParams({ q: query, format: 'json', engines: 'google,bing,duckduckgo' });
 
     try {
-      const response = await fetch(`${searxngUrl}/search?${params}`);
+      const response = await fetch(`${searxngUrl}/search?${params}`, {
+        signal: AbortSignal.timeout(10000),
+      });
       if (!response.ok) throw new Error('SearXNG failed');
 
       const data = await response.json();
@@ -250,29 +353,247 @@ export class IntelligentSearchService {
         relevanceScore: 0.85,
         domain: item.parsed_url?.[1] || new URL(item.url).hostname,
       }));
-    } catch {
-      return this.generateMockResults(query, 'searxng');
+    } catch (e) {
+      console.warn('SearXNG failed:', e);
+      return [];
     }
   }
 
   private async searchGoogle(query: string): Promise<SearchResult[]> {
     if (!this.apiKeys.google) {
-      return this.generateMockResults(query, 'google');
+      console.info('Google search requires API key (CX configured). Skipping.');
+      return [];
     }
-    return this.generateMockResults(query, 'google');
+    try {
+      const { GOOGLE_CX } = this;
+      const url = `https://www.googleapis.com/customsearch/v1?key=${this.apiKeys.google}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`Google ${res.status}`);
+      const data = await res.json();
+      return (data.items || []).map((item: any) => ({
+        id: `google_${item.link}`,
+        title: item.title,
+        url: item.link,
+        snippet: item.snippet,
+        source: 'google',
+        relevanceScore: 0.88,
+        domain: new URL(item.link).hostname,
+      }));
+    } catch (e) {
+      console.warn('Google search failed:', e);
+      return [];
+    }
   }
 
-  private generateMockResults(query: string, source: string): SearchResult[] {
-    const domains = ['example.com', 'wikipedia.org', 'github.com', 'stackoverflow.com', 'medium.com'];
-    return Array.from({ length: 5 }, (_, i) => ({
-      id: `${source}_${i}_${Date.now()}`,
-      title: `${source.toUpperCase()} Result ${i + 1} for "${query}"`,
-      url: `https://${domains[i]}/search-result-${i + 1}`,
-      snippet: `This is a simulated search result from ${source} for the query "${query}".`,
-      source,
-      relevanceScore: 0.6 + Math.random() * 0.3,
-      domain: domains[i],
-    }));
+  // Wikipedia REST API - CORS enabled, no key required
+  private async searchWikipedia(query: string): Promise<SearchResult[]> {
+    try {
+      const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=10`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`Wikipedia ${res.status}`);
+      const data = await res.json();
+      const hits = data?.query?.search || [];
+      return hits.map((item: any) => {
+        const title = String(item.title || '').replace(/<[^>]+>/g, '');
+        const snippet = String(item.snippet || '').replace(/<[^>]+>/g, '');
+        const pageUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(String(item.title || '').replace(/ /g, '_'))}`;
+        return {
+          id: `wiki_${item.pageid}`,
+          title,
+          url: pageUrl,
+          snippet,
+          source: 'wikipedia',
+          relevanceScore: 0.82,
+          domain: 'wikipedia.org',
+        };
+      });
+    } catch (e) {
+      console.warn('Wikipedia search failed:', e);
+      return [];
+    }
+  }
+
+  // StackOverflow public API - CORS enabled, no key required
+  private async searchStackOverflow(query: string): Promise<SearchResult[]> {
+    try {
+      const url = `https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q=${encodeURIComponent(query)}&site=stackoverflow&pagesize=10`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`StackOverflow ${res.status}`);
+      const data = await res.json();
+      return (data.items || []).map((item: any) => ({
+        id: `so_${item.question_id}`,
+        title: item.title,
+        url: item.link,
+        snippet: this.stripHtml(item.body || '').slice(0, 240),
+        source: 'stackoverflow',
+        relevanceScore: 0.78,
+        domain: 'stackoverflow.com',
+        publishedDate: item.creation_date ? new Date(item.creation_date * 1000).toISOString() : undefined,
+      }));
+    } catch (e) {
+      console.warn('StackOverflow search failed:', e);
+      return [];
+    }
+  }
+
+  private stripHtml(html: string): string {
+    return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  // GitHub REST search API - CORS enabled (rate-limited to 10 req/min unauthenticated)
+  private async searchGithub(query: string): Promise<SearchResult[]> {
+    try {
+      const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&per_page=10&sort=stars&order=desc`;
+      const res = await fetch(url, {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) throw new Error(`GitHub ${res.status}`);
+      const data = await res.json();
+      return (data.items || []).map((item: any) => ({
+        id: `gh_${item.id}`,
+        title: `${item.full_name}  ★${(item.stargazers_count || 0).toLocaleString()}`,
+        url: item.html_url,
+        snippet: (item.description || '').slice(0, 240) || `主要语言: ${item.language || 'N/A'}`,
+        source: 'github',
+        relevanceScore: 0.86,
+        publishedDate: item.updated_at,
+        domain: 'github.com',
+      }));
+    } catch (e) {
+      console.warn('GitHub search failed:', e);
+      return [];
+    }
+  }
+
+  // HackerNews Algolia search - CORS enabled, no key
+  private async searchHackerNews(query: string): Promise<SearchResult[]> {
+    try {
+      const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&hitsPerPage=10&tags=story`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`HN ${res.status}`);
+      const data = await res.json();
+      return (data.hits || []).map((item: any) => ({
+        id: `hn_${item.objectID}`,
+        title: item.title || item.story_title || '(无标题)',
+        url: item.url || `https://news.ycombinator.com/item?id=${item.objectID}`,
+        snippet: `${item.points || 0} 分 · ${item.num_comments || 0} 评论 · ${item.author}`,
+        source: 'hackernews',
+        relevanceScore: 0.74,
+        publishedDate: item.created_at,
+        domain: 'news.ycombinator.com',
+      }));
+    } catch (e) {
+      console.warn('HackerNews search failed:', e);
+      return [];
+    }
+  }
+
+  // Reddit public JSON - CORS enabled, no key (rate-limited)
+  private async searchReddit(query: string): Promise<SearchResult[]> {
+    try {
+      const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&limit=10&sort=relevance`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'NexusAI/1.0' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) throw new Error(`Reddit ${res.status}`);
+      const data = await res.json();
+      return (data?.data?.children || []).map((c: any) => {
+        const d = c.data || {};
+        return {
+          id: `reddit_${d.id}`,
+          title: d.title,
+          url: `https://reddit.com${d.permalink}`,
+          snippet: (d.selftext || '').slice(0, 240) || `r/${d.subreddit} · ${d.score} 分 · ${d.num_comments} 评论`,
+          source: 'reddit',
+          relevanceScore: 0.7,
+          publishedDate: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : undefined,
+          domain: 'reddit.com',
+        };
+      });
+    } catch (e) {
+      console.warn('Reddit search failed:', e);
+      return [];
+    }
+  }
+
+  // npm registry search - CORS enabled, no key
+  private async searchNpm(query: string): Promise<SearchResult[]> {
+    try {
+      const url = `https://registry.npmjs.com/-/v1/search?text=${encodeURIComponent(query)}&size=10`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`npm ${res.status}`);
+      const data = await res.json();
+      return (data.objects || []).map((item: any) => {
+        const p = item.package || {};
+        return {
+          id: `npm_${p.name}`,
+          title: `${p.name}  v${p.version || ''}`,
+          url: p.links?.npm || `https://www.npmjs.com/package/${p.name}`,
+          snippet: (p.description || '').slice(0, 240) || `作者: ${p.publisher?.username || ''}`,
+          source: 'npm',
+          relevanceScore: 0.72,
+          domain: 'npmjs.com',
+        };
+      });
+    } catch (e) {
+      console.warn('npm search failed:', e);
+      return [];
+    }
+  }
+
+  // Open Library search - CORS enabled, no key
+  private async searchOpenLibrary(query: string): Promise<SearchResult[]> {
+    try {
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error(`OpenLibrary ${res.status}`);
+      const data = await res.json();
+      return (data.docs || []).map((item: any, i: number) => ({
+        id: `ol_${item.key || i}`,
+        title: item.title,
+        url: `https://openlibrary.org${item.key}`,
+        snippet: `${item.author_name?.[0] || '匿名'} · 首次出版 ${item.first_publish_year || '未知'}`,
+        source: 'openlibrary',
+        relevanceScore: 0.68,
+        domain: 'openlibrary.org',
+      }));
+    } catch (e) {
+      console.warn('OpenLibrary search failed:', e);
+      return [];
+    }
+  }
+
+  // arXiv API - supports CORS via &origin=*
+  private async searchArxiv(query: string): Promise<SearchResult[]> {
+    try {
+      const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=10`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+      if (!res.ok) throw new Error(`arXiv ${res.status}`);
+      const xml = await res.text();
+      const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      const entries = Array.from(doc.querySelectorAll('entry')).slice(0, 10);
+      return entries.map((entry) => {
+        const title = (entry.querySelector('title')?.textContent || '').trim().replace(/\s+/g, ' ');
+        const summary = (entry.querySelector('summary')?.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 240);
+        const link = entry.querySelector('id')?.textContent || '';
+        const published = entry.querySelector('published')?.textContent || '';
+        return {
+          id: `arxiv_${link}`,
+          title,
+          url: link,
+          snippet: summary,
+          source: 'arxiv',
+          relevanceScore: 0.8,
+          publishedDate: published,
+          domain: 'arxiv.org',
+        };
+      });
+    } catch (e) {
+      console.warn('arXiv search failed:', e);
+      return [];
+    }
   }
 
   private fuseResults(results: SearchResult[], maxResults: number): SearchResult[] {

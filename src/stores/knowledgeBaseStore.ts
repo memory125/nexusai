@@ -47,7 +47,9 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseState>()(
       isUploading: false,
       uploadProgress: 0,
       embeddingConfig: {
-        model: 'simple-hash',
+        model: 'ollama-nomic-embed-text',
+        baseUrl: 'http://localhost:11434',
+        ollamaModel: 'nomic-embed-text',
       },
 
       createKnowledgeBase: (name, description = '', tags = []) => {

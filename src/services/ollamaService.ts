@@ -122,24 +122,52 @@ export class OllamaService {
 
   async *streamChat(
     messages: OllamaMessage[],
-    model?: string
+    model?: string,
+    signal?: AbortSignal
   ): AsyncGenerator<string> {
     const request: OllamaRequest = {
       model: model || this.defaultModel,
       messages,
-      stream: false,
+      stream: true,
     };
 
-    const response = await fetchWithRetry(async () => {
-      return await invoke<string>('fetch_ollama', {
-        url: `${this.endpoint}/api/chat`,
-        method: 'POST',
-        body: JSON.stringify(request)
-      });
-    }, 2, 2000);
+    try {
+      const response = await fetchWithRetry(async () => {
+        return await invoke<string>('fetch_ollama_stream', {
+          url: `${this.endpoint}/api/chat`,
+          method: 'POST',
+          body: JSON.stringify(request)
+        });
+      }, 2, 2000);
 
-    const data: OllamaResponse = JSON.parse(response);
-    yield data.message.content;
+      // If we get a full response (non-streaming fallback), yield it all at once
+      if (!response.includes('\n')) {
+        const data: OllamaResponse = JSON.parse(response);
+        yield data.message.content;
+        return;
+      }
+
+      // Parse SSE stream chunks
+      const lines = response.split('\n');
+      for (const line of lines) {
+        if (signal?.aborted) break;
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('{')) continue;
+
+        try {
+          const data: OllamaResponse = JSON.parse(trimmed);
+          if (data.message?.content) {
+            yield data.message.content;
+          }
+          if (data.done) break;
+        } catch {
+          // Skip malformed chunks
+        }
+      }
+    } catch (error) {
+      console.error('Ollama stream chat error:', error);
+      throw error;
+    }
   }
 
   async generateEmbedding(text: string, model: string = 'nomic-embed-text:latest'): Promise<number[]> {

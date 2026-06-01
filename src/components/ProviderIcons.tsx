@@ -104,6 +104,22 @@ export function ProviderIcon({ id, size = 32 }: { id: string; size?: number }) {
         </svg>
       );
 
+    case 'lmstudio':
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id={`lms-g-${s}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#f43f5e"/>
+              <stop offset="100%" stopColor="#ec4899"/>
+            </linearGradient>
+          </defs>
+          <rect width="24" height="24" rx="6" fill={`url(#lms-g-${s})`}/>
+          <circle cx="12" cy="12" r="5" fill="none" stroke="white" strokeWidth="1.8"/>
+          <circle cx="12" cy="12" r="2" fill="white"/>
+          <path d="M12 5v2M12 17v2M5 12h2M17 12h2" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      );
+
     default:
       return (
         <svg width={s} height={s} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

@@ -131,25 +131,25 @@ function ThemeCard({ themeId, name, description, preview, isActive, onClick }: {
         </div>
 
         {/* Theme info */}
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
             <h4
-              className="text-xs font-semibold"
-              style={{ color: isLight ? '#1e293b' : '#f1f5f9' }}
+              className="text-xs font-bold truncate"
+              style={{ color: '#ffffff' }}
             >
               {name}
             </h4>
             <p
-              className="text-[10px] mt-0.5 leading-relaxed"
-              style={{ color: isLight ? '#64748b' : '#94a3b8' }}
+              className="text-[11px] mt-1 leading-snug font-medium"
+              style={{ color: '#ffffff', opacity: 0.92 }}
             >
               {description}
             </p>
           </div>
           {/* Accent color dots */}
-          <div className="flex gap-1 mt-0.5">
-            <div className="h-3 w-3 rounded-full border border-white/10" style={{ background: preview.bg3 }} />
-            <div className="h-3 w-3 rounded-full border border-white/10" style={{ background: preview.accent }} />
+          <div className="flex gap-1 mt-0.5 shrink-0">
+            <div className="h-3 w-3 rounded-full border" style={{ background: preview.bg3, borderColor: 'rgba(255,255,255,0.4)' }} />
+            <div className="h-3 w-3 rounded-full border" style={{ background: preview.accent, borderColor: 'rgba(255,255,255,0.4)' }} />
           </div>
         </div>
       </div>
@@ -232,7 +232,7 @@ export function SettingsPage() {
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <Palette className="h-4.5 w-4.5" style={{ color: 'var(--t-accent-light)' }} />
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--t-text)' }}>外观主题</h3>
+                <h3 className="text-sm font-bold" style={{ color: 'var(--t-text)' }}>外观主题</h3>
               </div>
               <div
                 className="flex items-center gap-2 rounded-xl px-3 py-1.5"
@@ -242,7 +242,7 @@ export function SettingsPage() {
                 }}
               >
                 <Sparkles className="h-3 w-3" style={{ color: 'var(--t-accent-light)' }} />
-                <span className="text-[10px] font-medium" style={{ color: 'var(--t-accent-text)' }}>
+                <span className="text-[10px] font-bold" style={{ color: 'var(--t-accent-text)' }}>
                   当前: {currentTheme?.name}
                 </span>
               </div>
@@ -252,10 +252,10 @@ export function SettingsPage() {
             <div className="flex items-center gap-2 mb-5 p-1 rounded-xl" style={{ background: 'var(--t-glass-card)' }}>
               <button
                 onClick={() => { if (theme.startsWith('light')) setTheme('midnight'); }}
-                className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-medium transition-all"
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all"
                 style={{
                   background: !theme.startsWith('light') ? 'var(--t-accent-subtle)' : 'transparent',
-                  color: !theme.startsWith('light') ? 'var(--t-text)' : 'var(--t-text-muted)',
+                  color: !theme.startsWith('light') ? 'var(--t-text)' : 'var(--t-text-secondary)',
                 }}
               >
                 <Moon className="h-3.5 w-3.5" />
@@ -263,10 +263,10 @@ export function SettingsPage() {
               </button>
               <button
                 onClick={() => { if (!theme.startsWith('light')) setTheme('light'); }}
-                className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-medium transition-all"
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all"
                 style={{
                   background: theme.startsWith('light') ? 'var(--t-accent-subtle)' : 'transparent',
-                  color: theme.startsWith('light') ? 'var(--t-text)' : 'var(--t-text-muted)',
+                  color: theme.startsWith('light') ? 'var(--t-text)' : 'var(--t-text-secondary)',
                 }}
               >
                 <Sun className="h-3.5 w-3.5" />
@@ -277,11 +277,11 @@ export function SettingsPage() {
             {/* Dark themes */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-3">
-                <Moon className="h-3 w-3" style={{ color: 'var(--t-text-muted)' }} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                <Moon className="h-3 w-3" style={{ color: 'var(--t-text-secondary)' }} />
+                <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--t-text-secondary)' }}>
                   深色主题
                 </span>
-                <span className="text-[10px] rounded-md px-1.5 py-0.5" style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}>
+                <span className="text-[10px] font-bold rounded-md px-1.5 py-0.5" style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}>
                   {darkThemes.length}
                 </span>
                 <div className="flex-1 h-px" style={{ background: 'var(--t-glass-border)' }} />
@@ -304,11 +304,11 @@ export function SettingsPage() {
             {/* Light themes */}
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <Sun className="h-3 w-3" style={{ color: 'var(--t-text-muted)' }} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                <Sun className="h-3 w-3" style={{ color: 'var(--t-text-secondary)' }} />
+                <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--t-text-secondary)' }}>
                   浅色主题
                 </span>
-                <span className="text-[10px] rounded-md px-1.5 py-0.5" style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}>
+                <span className="text-[10px] font-bold rounded-md px-1.5 py-0.5" style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)' }}>
                   {lightThemes.length}
                 </span>
                 <div className="flex-1 h-px" style={{ background: 'var(--t-glass-border)' }} />
@@ -587,25 +587,25 @@ export function SettingsPage() {
           const isLight = previewTheme.startsWith('light');
           
           return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-              <div className="glass-card rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}>
+              <div className="rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto border" style={{ background: 'rgba(20,20,30,0.95)', borderColor: 'rgba(255,255,255,0.15)' }}>
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <Eye className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
+                    <Eye className="h-5 w-5" style={{ color: '#ffffff' }} />
                     <div>
-                      <h3 className="text-lg font-semibold" style={{ color: 'var(--t-text)' }}>
+                      <h3 className="text-lg font-bold" style={{ color: '#ffffff' }}>
                         预览主题
                       </h3>
-                      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+                      <p className="text-xs font-semibold" style={{ color: '#ffffff', opacity: 0.85 }}>
                         {previewingTheme.name}
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={handleCancelPreview}
-                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-                    style={{ color: 'var(--t-text-muted)' }}
+                    className="p-2 rounded-lg transition-colors"
+                    style={{ color: '#ffffff', background: 'rgba(255,255,255,0.1)' }}
                   >
                     <X className="h-5 w-5" />
                   </button>
@@ -679,26 +679,26 @@ export function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* Theme Info */}
+                  {/* Theme Info - 统一白色加粗, 任何主题都清晰可读 */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl" style={{ background: 'var(--t-glass-card)' }}>
-                      <div className="text-xs mb-2" style={{ color: 'var(--t-text-muted)' }}>主色调</div>
+                    <div className="p-4 rounded-xl border" style={{ background: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.18)' }}>
+                      <div className="text-xs mb-2 font-bold uppercase tracking-wider" style={{ color: '#ffffff' }}>主色调</div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded" style={{ background: previewingTheme.preview.accent }} />
-                        <span className="text-sm" style={{ color: 'var(--t-text)' }}>{previewingTheme.preview.accent}</span>
+                        <div className="w-5 h-5 rounded shadow-sm border" style={{ background: previewingTheme.preview.accent, borderColor: 'rgba(255,255,255,0.4)' }} />
+                        <span className="text-sm font-mono font-bold" style={{ color: '#ffffff' }}>{previewingTheme.preview.accent}</span>
                       </div>
                     </div>
-                    <div className="p-4 rounded-xl" style={{ background: 'var(--t-glass-card)' }}>
-                      <div className="text-xs mb-2" style={{ color: 'var(--t-text-muted)' }}>背景色</div>
+                    <div className="p-4 rounded-xl border" style={{ background: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.18)' }}>
+                      <div className="text-xs mb-2 font-bold uppercase tracking-wider" style={{ color: '#ffffff' }}>背景色</div>
                       <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded" style={{ background: previewingTheme.preview.bg1 }} />
-                        <span className="text-sm" style={{ color: 'var(--t-text)' }}>{previewingTheme.preview.bg1}</span>
+                        <div className="w-5 h-5 rounded shadow-sm border" style={{ background: previewingTheme.preview.bg1, borderColor: 'rgba(255,255,255,0.4)' }} />
+                        <span className="text-sm font-mono font-bold" style={{ color: '#ffffff' }}>{previewingTheme.preview.bg1}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Description */}
-                  <p className="text-sm" style={{ color: 'var(--t-text-secondary)' }}>
+                  {/* Description - 白色加粗 */}
+                  <p className="text-sm font-semibold" style={{ color: '#ffffff' }}>
                     {previewingTheme.description}
                   </p>
 
@@ -706,18 +706,23 @@ export function SettingsPage() {
                   <div className="flex gap-3">
                     <button
                       onClick={handleCancelPreview}
-                      className="flex-1 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
-                      style={{ color: 'var(--t-text)' }}
+                      className="flex-1 px-4 py-3 rounded-xl transition-colors text-sm font-bold border"
+                      style={{ 
+                        background: 'rgba(255,255,255,0.1)',
+                        color: '#ffffff',
+                        borderColor: 'rgba(255,255,255,0.3)'
+                      }}
                     >
                       取消
                     </button>
                     <button
                       onClick={handleApplyTheme}
-                      className="flex-1 px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm"
+                      className="flex-1 px-4 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm font-bold"
                       style={{ 
-                        background: previewingTheme.preview.accent + '20', 
-                        color: previewingTheme.preview.accent,
-                        border: `1px solid ${previewingTheme.preview.accent}40`
+                        background: previewingTheme.preview.accent,
+                        color: '#ffffff',
+                        border: `1px solid ${previewingTheme.preview.accent}`,
+                        boxShadow: `0 4px 16px ${previewingTheme.preview.accent}60`
                       }}
                     >
                       <Zap className="h-4 w-4" />

@@ -8,7 +8,7 @@
 
 import { Document, DocumentChunk, splitTextIntoChunks } from '../types/rag';
 import { DocumentParser } from './documentParser';
-import { EmbeddingService, EmbeddingConfig, RAGPerformanceStats } from './embeddingService';
+import { EmbeddingService, EmbeddingConfig, RAGPerformanceStats, EMBEDDING_MODELS } from './embeddingService';
 import { AdaptiveVectorIndex } from './hnswVectorIndex';
 import { indexedDBCacheService } from './indexedDBCacheService';
 import { ragWorkerManager } from './ragWorkerManager';
@@ -37,12 +37,10 @@ export class OptimizedRAGService {
     this.knowledgeBaseId = knowledgeBaseId;
     this.config = config;
     this.embeddingService = new EmbeddingService(config);
-    
-    // Get dimensions from selected model
-    const { EMBEDDING_MODELS } = require('./embeddingService');
+
     const model = EMBEDDING_MODELS.find((m: any) => m.id === config.model);
     const dimensions = model?.dimensions || 384;
-    
+
     this.vectorIndex = new AdaptiveVectorIndex(dimensions);
   }
 

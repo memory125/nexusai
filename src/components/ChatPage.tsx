@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore, modelProviders } from '../store';
-import { Send, Sparkles, Bot, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, Volume1, FileCode, Search, Star, Plus, ThumbsUp, ThumbsDown, Download, Copy, FileJson, File } from 'lucide-react';
+import { Send, User, ChevronDown, Paperclip, Mic, StopCircle, Database, ChevronUp, FileText, X, Play, Volume2, Volume1, FileCode, Search, Star, Plus, ThumbsUp, ThumbsDown, Download, Copy, FileJson, File, Zap, Check } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
 import { RAGService } from '../services/ragService';
 import { multimodalService } from '../services/multimodalService';
@@ -11,13 +11,9 @@ import { ttsService } from '../services/ttsService';
 import type { Attachment } from '../types/multimodal';
 import { formatFileSize } from '../types/multimodal';
 
-// Knowledge base store - lazy import
-let kbStore: any = null;
-try {
-  kbStore = require('../stores/knowledgeBaseStore');
-} catch (e) {
-  console.warn('KnowledgeBaseStore not available');
-}
+// Knowledge base store
+import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
+
 
 // Helper functions for export
 function downloadFile(content: string, filename: string, mimeType: string) {
@@ -107,7 +103,7 @@ function TemplateSelectorModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="glass-card rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+      <div className="glass-popover rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold" style={{ color: 'var(--t-text)' }}>选择模板</h3>
@@ -251,6 +247,59 @@ function TemplateSelectorModal({
         </div>
       </div>
     </div>
+  );
+}
+
+// Cute mascot - a friendly robot-cat "Nexi" 🐱✨
+function Mascot({ size = 24, animated = false }: { size?: number; animated?: boolean }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={animated ? { animation: 'mascot-breathe 2.4s ease-in-out infinite' } : undefined}
+    >
+      {/* Cat ears (outer) */}
+      <path d="M 14 22 L 10 8 L 22 16 Z" fill="#a78bfa" />
+      <path d="M 50 22 L 54 8 L 42 16 Z" fill="#a78bfa" />
+      {/* Cat ears (inner) */}
+      <path d="M 15 20 L 13.5 12 L 20 16.5 Z" fill="#f0abfc" />
+      <path d="M 49 20 L 50.5 12 L 44 16.5 Z" fill="#f0abfc" />
+      {/* Head/body — rounded */}
+      <ellipse cx="32" cy="38" rx="22" ry="20" fill="url(#mascotBody)" stroke="#7c3aed" strokeWidth="1.5" />
+      {/* Cheek blush */}
+      <ellipse cx="18" cy="42" rx="3.5" ry="2" fill="#fda4af" opacity="0.7" />
+      <ellipse cx="46" cy="42" rx="3.5" ry="2" fill="#fda4af" opacity="0.7" />
+      {/* Eyes — sparkly */}
+      <ellipse cx="24" cy="36" rx="3" ry="4" fill="#1e1b4b" />
+      <ellipse cx="40" cy="36" rx="3" ry="4" fill="#1e1b4b" />
+      {/* Eye highlights */}
+      <circle cx="25.2" cy="34.5" r="1" fill="white" />
+      <circle cx="41.2" cy="34.5" r="1" fill="white" />
+      <circle cx="23" cy="37.5" r="0.5" fill="white" />
+      <circle cx="39" cy="37.5" r="0.5" fill="white" />
+      {/* Smile */}
+      <path d="M 28 44 Q 32 47.5 36 44" stroke="#1e1b4b" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      {/* Tiny tongue */}
+      <ellipse cx="32" cy="45.5" rx="1.2" ry="0.8" fill="#f472b6" />
+      {/* Antenna */}
+      <line x1="32" y1="16" x2="32" y2="11" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="32" cy="9" r="2" fill="#fbbf24" stroke="#f59e0b" strokeWidth="0.5" />
+      <circle cx="32" cy="9" r="0.6" fill="white" />
+      {/* Tiny whiskers */}
+      <line x1="14" y1="40" x2="8" y2="38" stroke="#a78bfa" strokeWidth="0.8" strokeLinecap="round" />
+      <line x1="14" y1="44" x2="8" y2="46" stroke="#a78bfa" strokeWidth="0.8" strokeLinecap="round" />
+      <line x1="50" y1="40" x2="56" y2="38" stroke="#a78bfa" strokeWidth="0.8" strokeLinecap="round" />
+      <line x1="50" y1="44" x2="56" y2="46" stroke="#a78bfa" strokeWidth="0.8" strokeLinecap="round" />
+      <defs>
+        <radialGradient id="mascotBody" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#ddd6fe" />
+          <stop offset="100%" stopColor="#a78bfa" />
+        </radialGradient>
+      </defs>
+    </svg>
   );
 }
 
@@ -596,15 +645,15 @@ export function ChatPage() {
   const {
     conversations, activeConversationId, addMessage,
     createConversation, selectedProvider, selectedModel,
-    setSelectedProvider, setSelectedModel, isGenerating,
-    activeAgent = null,
+    setSelectedProvider, setSelectedModel, isGenerating, stopGeneration,
+    activeAgent, setActiveAgent, agents, skills, activeSkillIds, toggleActiveSkill,
   } = useStore();
 
   // Knowledge base store - with defaults
-  const kb = kbStore?.useKnowledgeBaseStore?.() || {};
+  const kb = useKnowledgeBaseStore();
   const getSelectedKnowledgeBases = kb.getSelectedKnowledgeBases || (() => []);
   const getSelectedChunks = kb.getSelectedChunks || (() => []);
-  const embeddingConfig = kb.embeddingConfig || { model: 'nomic-embed-text', dimensions: 384 };
+  const embeddingConfig = kb.embeddingConfig || { model: 'ollama-nomic-embed-text', baseUrl: 'http://localhost:11434', ollamaModel: 'nomic-embed-text' };
 
   const [input, setInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -614,6 +663,9 @@ export function ChatPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const [showSkillPicker, setShowSkillPicker] = useState(false);
+  const [skillCategoryFilter, setSkillCategoryFilter] = useState<string>('全部');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -625,6 +677,20 @@ export function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeConv?.messages]);
+
+  useEffect(() => {
+    const checkPending = () => {
+      const pending = (window as any).__nexusai_pendingInput;
+      if (pending) {
+        setInput(pending);
+        (window as any).__nexusai_pendingInput = null;
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }
+    };
+    checkPending();
+    const interval = setInterval(checkPending, 300);
+    return () => clearInterval(interval);
+  }, []);
 
   
 
@@ -874,7 +940,7 @@ export function ChatPage() {
               {activeAgent ? (
                 <span className="text-4xl">{activeAgent.icon}</span>
               ) : (
-                <Sparkles className="h-10 w-10" style={{ color: 'var(--t-accent-light)' }} />
+                <Mascot size={64} />
               )}
             </div>
             <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--t-text)' }}>
@@ -899,7 +965,7 @@ export function ChatPage() {
               </button>
 
               {showModelPicker && (
-                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 glass-strong rounded-xl p-2 w-80 z-50 max-h-80 overflow-y-auto animate-fade-in">
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 glass-popover rounded-xl p-2 w-80 z-50 max-h-80 overflow-y-auto animate-fade-in">
                   {providers.map(provider => (
                     <div key={provider.id} className="mb-1">
                       <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
@@ -981,8 +1047,54 @@ export function ChatPage() {
   }
 
   function renderInputBar() {
+    const activeSkills = skills.filter(s => activeSkillIds.includes(s.id));
+    const skillCategories = ['全部', ...Array.from(new Set(skills.map(s => s.category)))];
+    const filteredSkills = skillCategoryFilter === '全部'
+      ? skills
+      : skills.filter(s => s.category === skillCategoryFilter);
+
     return (
       <div className="p-4 pt-2">
+        {/* Active Agent + Skills Chips */}
+        {(activeAgent || activeSkills.length > 0) && (
+          <div className="max-w-3xl mx-auto mb-2 flex flex-wrap items-center gap-1.5 px-1">
+            {activeAgent && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium"
+                style={{ background: `${activeAgent.color}22`, color: activeAgent.color, border: `1px solid ${activeAgent.color}55` }}
+                title={activeAgent.description}
+              >
+                <span>{activeAgent.icon}</span>
+                <span>Agent · {activeAgent.name}</span>
+                <button
+                  onClick={() => setActiveAgent(null)}
+                  className="ml-0.5 hover:opacity-70"
+                  title="移除Agent"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            )}
+            {activeSkills.map(s => (
+              <span
+                key={s.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium"
+                style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-text)', border: '1px solid var(--t-accent-border)' }}
+                title={s.description}
+              >
+                <span>{s.icon}</span>
+                <span>{s.name}</span>
+                <button
+                  onClick={() => toggleActiveSkill(s.id)}
+                  className="ml-0.5 hover:opacity-70"
+                  title="关闭技能"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="glass-strong rounded-2xl p-2 max-w-3xl mx-auto">
           {/* Attachment Preview */}
           {attachments.length > 0 && (
@@ -991,7 +1103,7 @@ export function ChatPage() {
                 <div
                   key={attachment.id}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
-                  style={{ background: 'var(--t-glass-card)', color: 'var(--t-text)' }}
+                  style={{ background: 'var(--t-popover-bg)', color: 'var(--t-text)', border: '1px solid var(--t-glass-border)' }}
                 >
                   {attachment.type === 'image' && attachment.localUrl && (
                     <img src={attachment.localUrl} alt={attachment.name} className="w-8 h-8 rounded object-cover" />
@@ -1013,8 +1125,157 @@ export function ChatPage() {
           )}
           
           <div className="flex items-end gap-2">
+            {/* Agent Selector */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowAgentPicker(!showAgentPicker); setShowSkillPicker(false); }}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all mb-0.5 ${activeAgent ? 'text-amber-400 bg-amber-500/10' : ''}`}
+                style={activeAgent ? {} : { color: 'var(--t-text-muted)' }}
+                title={activeAgent ? `当前 Agent: ${activeAgent.name}` : '选择 Agent'}
+              >
+                {activeAgent ? <span className="text-base">{activeAgent.icon}</span> : <Mascot size={20} animated />}
+              </button>
+              {showAgentPicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowAgentPicker(false)} />
+                  <div className="absolute bottom-full left-0 mb-2 glass-popover rounded-xl p-2 w-72 z-50 max-h-96 overflow-y-auto animate-fade-in">
+                    <div className="flex items-center gap-2 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                      <Mascot size={14} />
+                      <span>选择 Agent</span>
+                    </div>
+                    <button
+                      onClick={() => { setActiveAgent(null); setShowAgentPicker(false); }}
+                      className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-all ${!activeAgent ? 'bg-white/10' : ''}`}
+                      style={{ color: 'var(--t-text-secondary)' }}
+                    >
+                      <span>—</span>
+                      <span>不使用 Agent</span>
+                      {!activeAgent && <Check className="h-3 w-3 ml-auto" style={{ color: 'var(--t-accent-light)' }} />}
+                    </button>
+                    <div className="border-t my-1" style={{ borderColor: 'var(--t-glass-border)' }} />
+                    {Object.entries(
+                      agents.reduce<Record<string, typeof agents>>((acc, a) => {
+                        (acc[a.category] = acc[a.category] || []).push(a);
+                        return acc;
+                      }, {})
+                    ).map(([cat, list]) => (
+                      <div key={cat} className="mb-1">
+                        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                          {cat}
+                        </div>
+                        {list.map(a => (
+                          <button
+                            key={a.id}
+                            onClick={() => { setActiveAgent(a); setShowAgentPicker(false); }}
+                            className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-all"
+                            style={{
+                              background: activeAgent?.id === a.id ? 'var(--t-accent-subtle)' : 'transparent',
+                              color: activeAgent?.id === a.id ? 'var(--t-text)' : 'var(--t-text-secondary)',
+                            }}
+                          >
+                            <span className="text-base shrink-0">{a.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate">{a.name}</p>
+                              <p className="text-[10px] truncate" style={{ color: 'var(--t-text-muted)' }}>{a.description}</p>
+                            </div>
+                            {activeAgent?.id === a.id && <Check className="h-3 w-3 shrink-0" style={{ color: 'var(--t-accent-light)' }} />}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Skills Selector */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowSkillPicker(!showSkillPicker); setShowAgentPicker(false); }}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all mb-0.5 relative ${activeSkillIds.length > 0 ? 'text-amber-400 bg-amber-500/10' : ''}`}
+                style={activeSkillIds.length > 0 ? {} : { color: 'var(--t-text-muted)' }}
+                title={activeSkillIds.length > 0 ? `已启用 ${activeSkillIds.length} 个技能` : '启用技能'}
+              >
+                <Zap className="h-4 w-4" />
+                {activeSkillIds.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-3.5 min-w-[14px] px-0.5 rounded-full text-[9px] font-bold flex items-center justify-center bg-amber-500 text-white">
+                    {activeSkillIds.length}
+                  </span>
+                )}
+              </button>
+              {showSkillPicker && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSkillPicker(false)} />
+                  <div className="absolute bottom-full left-0 mb-2 glass-popover rounded-xl p-2 w-80 z-50 max-h-96 overflow-hidden flex flex-col animate-fade-in">
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                        <Zap className="h-3 w-3" />
+                        <span>启用技能 ({activeSkillIds.length})</span>
+                      </div>
+                      {activeSkillIds.length > 0 && (
+                        <button
+                          onClick={() => { skills.forEach(s => { if (activeSkillIds.includes(s.id)) toggleActiveSkill(s.id); }); }}
+                          className="text-[10px] hover:underline"
+                          style={{ color: 'var(--t-text-muted)' }}
+                        >
+                          清空
+                        </button>
+                      )}
+                    </div>
+                    {/* Category tabs */}
+                    <div className="flex gap-1 px-1 pb-1 overflow-x-auto" style={{ borderBottom: '1px solid var(--t-glass-border)' }}>
+                      {skillCategories.map(c => (
+                        <button
+                          key={c}
+                          onClick={() => setSkillCategoryFilter(c)}
+                          className={`shrink-0 px-2 py-0.5 text-[10px] rounded transition-colors ${skillCategoryFilter === c ? 'font-semibold' : ''}`}
+                          style={{
+                            background: skillCategoryFilter === c ? 'var(--t-accent-subtle)' : 'transparent',
+                            color: skillCategoryFilter === c ? 'var(--t-accent-text)' : 'var(--t-text-muted)',
+                          }}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex-1 overflow-y-auto mt-1">
+                      {filteredSkills.map(s => {
+                        const isOn = activeSkillIds.includes(s.id);
+                        return (
+                          <button
+                            key={s.id}
+                            onClick={() => toggleActiveSkill(s.id)}
+                            className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-all"
+                            style={{
+                              background: isOn ? 'var(--t-accent-subtle)' : 'transparent',
+                              color: isOn ? 'var(--t-text)' : 'var(--t-text-secondary)',
+                            }}
+                          >
+                            <span className="text-base shrink-0">{s.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate">{s.name}</p>
+                              <p className="text-[10px] truncate" style={{ color: 'var(--t-text-muted)' }}>{s.description}</p>
+                            </div>
+                            <div
+                              className={`h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors`}
+                              style={{
+                                background: isOn ? 'var(--t-accent)' : 'transparent',
+                                borderColor: isOn ? 'var(--t-accent)' : 'var(--t-glass-border)',
+                              }}
+                            >
+                              {isOn && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
             {/* Template Button */}
-            <button 
+            <button
               onClick={() => setShowTemplateSelector(true)}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all mb-0.5"
               style={{ color: 'var(--t-text-muted)' }}
@@ -1058,7 +1319,11 @@ export function ChatPage() {
               <Mic className="h-4 w-4" />
             </button>
             {isGenerating ? (
-              <button className="glass-btn flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-red-400 mb-0.5">
+              <button
+                onClick={() => stopGeneration()}
+                className="glass-btn flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-red-400 mb-0.5 hover:bg-red-500/20 transition-colors"
+                title="停止生成"
+              >
                 <StopCircle className="h-4 w-4" />
               </button>
             ) : (
@@ -1126,13 +1391,13 @@ export function ChatPage() {
             >
               {msg.role === 'assistant' && (
                 <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl mt-1"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl mt-1 overflow-hidden"
                   style={{
                     background: 'var(--t-accent-subtle)',
                     border: '1px solid var(--t-accent-border)',
                   }}
                 >
-                  {activeAgent ? <span className="text-sm">{activeAgent.icon}</span> : <Bot className="h-4 w-4" style={{ color: 'var(--t-accent-light)' }} />}
+                  {activeAgent ? <span className="text-sm">{activeAgent.icon}</span> : <Mascot size={28} animated />}
                 </div>
               )}
               <div
@@ -1181,10 +1446,20 @@ export function ChatPage() {
                 </>
               ) : (
                   <>
-                    <div className="whitespace-pre-wrap">{renderContent(msg.content)}</div>
+                    {msg.content.trim() === '' && isGenerating && msg === activeConv.messages[activeConv.messages.length - 1] ? (
+                      <div className="typing-dots py-1">
+                        <span /><span /><span />
+                      </div>
+                    ) : (
+                      <div className="whitespace-pre-wrap">{renderContent(msg.content)}</div>
+                    )}
                     {/* Display RAG sources for assistant messages */}
                     {msg.ragSources && msg.ragSources.length > 0 && (
                       <RAGSources sources={msg.ragSources} stats={msg.ragStats} />
+                    )}
+                    {/* Display skill execution results */}
+                    {msg.skillResults && msg.skillResults.length > 0 && (
+                      <SkillResults results={msg.skillResults} />
                     )}
                   </>
                 )}
@@ -1238,24 +1513,6 @@ export function ChatPage() {
             </div>
           ))}
 
-          {isGenerating && (
-            <div className="flex gap-3 animate-fade-in">
-              <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl mt-1"
-                style={{
-                  background: 'var(--t-accent-subtle)',
-                  border: '1px solid var(--t-accent-border)',
-                }}
-              >
-                {activeAgent ? <span className="text-sm">{activeAgent.icon}</span> : <Bot className="h-4 w-4" style={{ color: 'var(--t-accent-light)' }} />}
-              </div>
-              <div className="glass-card rounded-2xl px-5 py-4">
-                <div className="typing-dots">
-                  <span /><span /><span />
-                </div>
-              </div>
-            </div>
-          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -1286,7 +1543,7 @@ export function ChatPage() {
       {/* Template Variable Input Modal */}
       {selectedTemplate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="glass-card rounded-2xl p-6 max-w-lg w-full mx-4">
+          <div className="glass-popover rounded-2xl p-6 max-w-lg w-full mx-4">
             <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--t-text)' }}>
               填写模板变量
             </h3>
@@ -1343,7 +1600,7 @@ export function ChatPage() {
       {/* Export Modal */}
       {showExportModal && activeConv && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="glass-card rounded-2xl p-6 max-w-md w-full mx-4">
+          <div className="glass-popover rounded-2xl p-6 max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <Download className="h-5 w-5" style={{ color: 'var(--t-accent-light)' }} />
@@ -1437,6 +1694,103 @@ export function ChatPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SkillResults({ results }: { results: Array<{ skillId: string; status: string; contextBlock?: string; error?: string; durationMs: number; attachments?: Array<{ type: string; url?: string; name: string }> }> }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  if (!results || results.length === 0) return null;
+
+  const successCount = results.filter(r => r.status === 'success').length;
+  const errorCount = results.filter(r => r.status === 'error').length;
+  const skippedCount = results.filter(r => r.status === 'skipped').length;
+  const totalMs = results.reduce((sum, r) => sum + (r.durationMs || 0), 0);
+  const imageAtts = results.flatMap(r => (r.attachments || []).filter(a => a.type === 'image' && a.url));
+
+  const skillLabels: Record<string, { name: string; icon: string }> = {
+    'web-search': { name: '网络搜索', icon: '🔍' },
+    'web-fetch': { name: '网页抓取', icon: '🌐' },
+    'image-generation': { name: '图片生成', icon: '🎨' },
+    'calculator': { name: '计算', icon: '🧮' },
+    'datetime': { name: '时间', icon: '⏰' },
+    'dictionary': { name: '词典', icon: '📖' },
+    'wikipedia': { name: '维基百科', icon: '📚' },
+    'weather': { name: '天气', icon: '☁️' },
+    'currency-converter': { name: '汇率', icon: '💱' },
+    'code-search': { name: 'GitHub', icon: '💻' },
+    'academic-search': { name: 'arXiv', icon: '🎓' },
+    'news-aggregator': { name: '新闻', icon: '📰' },
+  };
+
+  return (
+    <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--t-glass-border)' }}>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-2 text-xs font-medium w-full hover:opacity-80 transition-opacity"
+        style={{ color: 'var(--t-accent-light)' }}
+      >
+        <Zap className="h-3.5 w-3.5" />
+        <span>技能执行 ({successCount} 成功{errorCount > 0 ? ` · ${errorCount} 失败` : ''}{skippedCount > 0 ? ` · ${skippedCount} 跳过` : ''} · {totalMs}ms)</span>
+        {isExpanded ? (
+          <ChevronUp className="h-3.5 w-3.5 ml-auto" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 ml-auto" />
+        )}
+      </button>
+
+      {!isExpanded && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {results.map((r, i) => {
+            const label = skillLabels[r.skillId] || { name: r.skillId, icon: '⚡' };
+            const dotColor = r.status === 'success' ? '#22c55e' : r.status === 'error' ? '#ef4444' : '#9ca3af';
+            return (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px]"
+                style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent)' }}
+                title={r.status === 'error' ? r.error : r.contextBlock?.slice(0, 100)}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
+                {label.icon} {label.name}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {isExpanded && (
+        <div className="space-y-2 mt-2">
+          {imageAtts.map((img, i) => (
+            <div key={i} className="glass-card rounded-lg p-2">
+              <img src={img.url} alt={img.name} className="w-full rounded" />
+            </div>
+          ))}
+          {results.map((r, i) => {
+            const label = skillLabels[r.skillId] || { name: r.skillId, icon: '⚡' };
+            const dotColor = r.status === 'success' ? '#22c55e' : r.status === 'error' ? '#ef4444' : '#9ca3af';
+            return (
+              <div key={i} className="glass-card rounded-lg p-2" style={{ borderLeft: `3px solid ${dotColor}` }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-base">{label.icon}</span>
+                  <span className="text-xs font-semibold" style={{ color: 'var(--t-text)' }}>{label.name}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+                    {r.status === 'success' ? '✓ 成功' : r.status === 'error' ? '✗ 失败' : '○ 跳过'} · {r.durationMs}ms
+                  </span>
+                </div>
+                {r.error && (
+                  <p className="text-[11px] text-red-400">{r.error}</p>
+                )}
+                {r.contextBlock && (
+                  <pre className="text-[11px] whitespace-pre-wrap font-mono mt-1 max-h-40 overflow-y-auto" style={{ color: 'var(--t-text-secondary)' }}>
+                    {r.contextBlock}
+                  </pre>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

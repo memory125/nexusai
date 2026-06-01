@@ -2,8 +2,8 @@ import { useState, useRef } from 'react';
 import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
 import { RAGService } from '../services/ragService';
 import { DocumentParser } from '../services/documentParser';
-import { EMBEDDING_MODELS, EmbeddingConfig } from '../services/embeddingService';
-import { Database, Plus, Trash2, Upload, X, Settings, Check, Key, Globe, Eye, FileText, Layers, Tag, Hash } from 'lucide-react';
+import { EMBEDDING_MODELS, EmbeddingConfig, EmbeddingService } from '../services/embeddingService';
+import { Database, Plus, Trash2, Upload, X, Settings, Check, Key, Globe, Eye, FileText, Layers, Tag, Hash, Zap, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Document, DocumentChunk, getTagColor } from '../types/rag';
 
 interface EmbeddingSettingsModalProps {
@@ -16,6 +16,16 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
   const [selectedModel, setSelectedModel] = useState(config.model);
   const [apiKey, setApiKey] = useState(config.apiKey || '');
   const [baseUrl, setBaseUrl] = useState(config.baseUrl || '');
+  const [ollamaModel, setOllamaModel] = useState(config.ollamaModel || '');
+
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    message: string;
+    dimensions?: number;
+    durationMs?: number;
+    sampleVector?: number[];
+  } | null>(null);
 
   const selectedModelInfo = EMBEDDING_MODELS.find(m => m.id === selectedModel);
 
@@ -24,8 +34,40 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
       model: selectedModel,
       apiKey: apiKey || undefined,
       baseUrl: baseUrl || undefined,
+      ollamaModel: ollamaModel || selectedModelInfo?.defaultModelName || undefined,
     });
     onClose();
+  };
+
+  const handleTest = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    const start = performance.now();
+    try {
+      const testConfig: EmbeddingConfig = {
+        model: selectedModel,
+        apiKey: apiKey || undefined,
+        baseUrl: baseUrl || undefined,
+        ollamaModel: ollamaModel || selectedModelInfo?.defaultModelName || undefined,
+      };
+      const service = new EmbeddingService(testConfig);
+      const vec = await service.generateEmbedding('Hello, this is a test of the embedding model.');
+      const duration = Math.round(performance.now() - start);
+      setTestResult({
+        ok: true,
+        message: `✅ 连接成功`,
+        dimensions: vec.length,
+        durationMs: duration,
+        sampleVector: vec.slice(0, 6).map((n) => Number(n.toFixed(4))),
+      });
+    } catch (e) {
+      setTestResult({
+        ok: false,
+        message: e instanceof Error ? e.message : '测试失败',
+      });
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   return (
@@ -77,8 +119,8 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
             </div>
           </div>
 
-          {/* API Key Input (for OpenAI) */}
-          {selectedModelInfo?.provider === 'openai' && (
+          {/* API Key Input (for OpenAI / Jina) */}
+          {(selectedModelInfo?.provider === 'openai' || selectedModelInfo?.id === 'jina-embeddings-v3') && (
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--t-text-secondary)' }}>
                 <Key className="h-3 w-3 inline mr-1" />
@@ -89,7 +131,7 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 className="glass-input w-full rounded-lg py-2 px-3 text-sm"
-                placeholder="sk-..."
+                placeholder={selectedModelInfo?.id === 'jina-embeddings-v3' ? 'jina_...' : 'sk-...'}
               />
               <p className="text-xs mt-1" style={{ color: 'var(--t-text-muted)' }}>
                 您的 API Key 仅存储在本地浏览器中
@@ -97,19 +139,57 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
             </div>
           )}
 
-          {/* Base URL Input (optional) */}
-          {selectedModelInfo?.provider === 'openai' && (
+          {/* Base URL Input (OpenAI / Ollama) */}
+          {(selectedModelInfo?.provider === 'openai' || selectedModelInfo?.provider === 'ollama') && (
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--t-text-secondary)' }}>
                 <Globe className="h-3 w-3 inline mr-1" />
-                自定义 Base URL (可选)
+                {selectedModelInfo?.provider === 'ollama' ? 'Ollama 服务地址' : '自定义 Base URL (可选)'}
               </label>
               <input
                 type="text"
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
                 className="glass-input w-full rounded-lg py-2 px-3 text-sm"
-                placeholder="https://api.openai.com/v1"
+                placeholder={selectedModelInfo?.provider === 'ollama' ? 'http://localhost:11434 (Ollama) / http://localhost:1234 (LM Studio)' : 'https://api.openai.com/v1'}
+              />
+            </div>
+          )}
+
+          {/* Ollama Model Name */}
+          {selectedModelInfo?.provider === 'ollama' && (
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--t-text-secondary)' }}>
+                Ollama 模型名称
+              </label>
+              <input
+                type="text"
+                value={ollamaModel}
+                onChange={(e) => setOllamaModel(e.target.value)}
+                className="glass-input w-full rounded-lg py-2 px-3 text-sm"
+                placeholder={selectedModelInfo?.defaultModelName || 'nomic-embed-text'}
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--t-text-muted)' }}>
+                留空使用默认 <code>{selectedModelInfo?.defaultModelName}</code>。<br />
+                <strong>Ollama</strong>: 首次使用前需运行 <code className="text-cyan-400">ollama pull {selectedModelInfo?.defaultModelName}</code>（默认端口 11434）<br />
+                <strong>LM Studio</strong>: 在 Settings → Service 启用 OpenAI 兼容，默认端口 1234；模型名称按 LM Studio 显示填写
+              </p>
+            </div>
+          )}
+
+          {/* HF API Token (optional) */}
+          {selectedModelInfo?.id === 'sentence-transformers/all-MiniLM-L6-v2' && (
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--t-text-secondary)' }}>
+                <Key className="h-3 w-3 inline mr-1" />
+                HF Token (可选, 提高速率限制)
+              </label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="glass-input w-full rounded-lg py-2 px-3 text-sm"
+                placeholder="hf_..."
               />
             </div>
           )}
@@ -123,10 +203,69 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
               模型: {selectedModelInfo?.name}
             </p>
             <p className="text-xs mt-1" style={{ color: 'var(--t-text-muted)' }}>
-              提供商: {selectedModelInfo?.provider === 'openai' ? 'OpenAI' : selectedModelInfo?.provider === 'huggingface' ? 'HuggingFace' : '本地'}
+              提供商: {
+                selectedModelInfo?.provider === 'openai' ? 'OpenAI' :
+                selectedModelInfo?.provider === 'huggingface' ? 'HuggingFace / Jina' :
+                selectedModelInfo?.provider === 'ollama' ? 'Ollama (本地)' : '本地哈希'
+              }
               {apiKey && ' · 已配置 API Key'}
+              {baseUrl && ` · ${baseUrl}`}
+              {ollamaModel && selectedModelInfo?.provider === 'ollama' && ` · 模型 ${ollamaModel}`}
             </p>
           </div>
+
+          <button
+            onClick={handleTest}
+            disabled={isTesting}
+            className="glass-card w-full rounded-lg py-2.5 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{ color: 'var(--t-text)' }}
+          >
+            {isTesting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                测试中…
+              </>
+            ) : (
+              <>
+                <Zap className="h-4 w-4" />
+                测试连接
+              </>
+            )}
+          </button>
+
+          {testResult && (
+            <div
+              className="glass-card rounded-xl p-3 text-xs"
+              style={{
+                background: testResult.ok ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                borderColor: testResult.ok ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)',
+                color: testResult.ok ? 'rgb(134,239,172)' : 'rgb(252,165,165)',
+              }}
+            >
+              <div className="flex items-start gap-2">
+                {testResult.ok ? (
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium whitespace-pre-wrap break-words">{testResult.message}</p>
+                  {testResult.ok && (
+                    <>
+                      <p className="mt-1 opacity-80">
+                        维度: <strong>{testResult.dimensions}</strong> · 耗时: <strong>{testResult.durationMs}ms</strong>
+                      </p>
+                      {testResult.sampleVector && (
+                        <p className="mt-1 font-mono opacity-70 break-all">
+                          [{testResult.sampleVector.join(', ')}, …]
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleSave}
@@ -412,6 +551,86 @@ export function KnowledgeBasePage() {
     }
   };
 
+  const handleUrlImport = async (url: string) => {
+    if (!url || !activeKnowledgeBaseId) return;
+    setIsUploading(true);
+    setUploadProgress(20);
+    try {
+      // 代理顺序: Jina Reader (CORS 完美, 返回 clean markdown) → allorigins → corsproxy → codetabs → wayback
+      // 注意: 浏览器 fetch 跨域 URL 总是触发 CORS 警告, 直接 fetch 必须放弃
+      const CORS_PROXIES: Array<{ name: string; fn: (u: string) => string; contentType?: 'html' | 'markdown' }> = [
+        { name: 'Jina Reader', fn: (u) => `https://r.jina.ai/${u}`, contentType: 'markdown' },
+        { name: 'allorigins', fn: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
+        { name: 'corsproxy.io', fn: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}` },
+        { name: 'codetabs', fn: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}` },
+        { name: 'thingproxy', fn: (u) => `https://thingproxy.freeboard.io/fetch/${u}` },
+        { name: 'web.archive', fn: (u) => `https://web.archive.org/web/2024/${u}` },
+      ];
+
+      let html: string | null = null;
+      let attempts: string[] = [];
+      for (const proxy of CORS_PROXIES) {
+        const proxiedUrl = proxy.fn(url);
+        try {
+          const res = await fetch(proxiedUrl, { signal: AbortSignal.timeout(15000) });
+          if (!res.ok) { attempts.push(`${proxy.name}=HTTP${res.status}`); continue; }
+          const text = await res.text();
+          if (text && text.length > 50) { html = text; break; }
+          attempts.push(`${proxy.name}=过短`);
+        } catch (e) {
+          attempts.push(`${proxy.name}=${e instanceof Error ? e.message.slice(0, 30) : 'failed'}`);
+        }
+      }
+      if (!html) throw new Error(`所有代理失败 (${attempts.join(', ')})`);
+
+      setUploadProgress(50);
+      const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+        .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+        .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
+        .replace(/<header[\s\S]*?<\/header>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!text || text.length < 20) throw new Error('页面内容过短');
+      console.log(`URL import: cleaned text length = ${text.length} chars`);
+
+      // 截断超大文本 (避免 V8 内部限制 + Ollama 处理慢)
+      const MAX_IMPORT_CHARS = 2_000_000; // 2MB 文本 ≈ 2500 chunks @ 800
+      const finalText = text.length > MAX_IMPORT_CHARS
+        ? text.slice(0, MAX_IMPORT_CHARS)
+        : text;
+      if (text.length > MAX_IMPORT_CHARS) {
+        console.warn(`URL import: truncating ${text.length} → ${MAX_IMPORT_CHARS} chars`);
+      }
+
+      setUploadProgress(70);
+      const file = new File([finalText], `${new URL(url).hostname || 'webpage'}.txt`, { type: 'text/plain' });
+      const ragService = new RAGService(embeddingConfig);
+      const { document, chunks } = await ragService.processDocument(
+        file, activeKnowledgeBaseId, (p) => setUploadProgress(Math.max(70, p))
+      );
+      addDocument(activeKnowledgeBaseId, document, chunks);
+      setUploadProgress(100);
+      setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 500);
+    } catch (e) {
+      console.error('URL import failed:', e);
+      const msg = e instanceof Error ? e.message : String(e);
+      const stack = e instanceof Error ? e.stack : '';
+      const isNetwork = /代理|fetch|network|cors|HTTP/i.test(msg);
+      const advice = isNetwork
+        ? '\n\n可能原因:\n1. 目标站点 (如飞书/微信) 防爬严格,所有代理被屏蔽\n2. 当前网络环境无法访问境外代理 (如 allorigins.win、corsproxy.io)\n3. 站点需要登录才能访问'
+        : '\n\n请检查:\n1. 嵌入服务 (Ollama/LM Studio) 是否在运行\n2. 嵌入模型是否已加载\n3. 浏览器控制台完整错误日志';
+      alert(`URL 导入失败: ${msg.slice(0, 300)}${advice}\n\n📋 完整错误请查看浏览器控制台 (F12 → Console)`);
+      if (stack) console.error('Stack:', stack);
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col p-6">
       <div className="flex items-center justify-between mb-6">
@@ -638,21 +857,35 @@ export function KnowledgeBasePage() {
                   <h3 className="text-sm font-semibold" style={{ color: 'var(--t-text)' }}>
                     {activeKB.name} - 文档列表
                   </h3>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="glass-btn flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium"
-                  >
-                    <Upload className="h-3 w-3" />
-                    {isUploading ? `上传中 ${uploadProgress}%` : '上传文档'}
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    accept=".txt,.md,.pdf,.docx,.xlsx,.csv"
-                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const url = prompt('输入网页 URL (https://...):');
+                        if (url) handleUrlImport(url);
+                      }}
+                      disabled={isUploading}
+                      className="glass-btn flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium"
+                      title="从 URL 抓取网页内容添加到知识库"
+                    >
+                      <Globe className="h-3 w-3" />
+                      URL 导入
+                    </button>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="glass-btn flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium"
+                    >
+                      <Upload className="h-3 w-3" />
+                      {isUploading ? `上传中 ${uploadProgress}%` : '上传文档'}
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      accept=".txt,.md,.pdf,.docx,.xlsx,.csv"
+                    />
+                  </div>
                 </div>
 
                 {activeKB.documents.length === 0 ? (

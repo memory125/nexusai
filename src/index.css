@@ -268,8 +268,8 @@
   --t-glass-input: rgba(255, 255, 255, 0.05);
   --t-glass-input-hover: rgba(255, 255, 255, 0.08);
   --t-text: #f5f3ff;
-  --t-text-secondary: #a78bfa;
-  --t-text-muted: #7c3aed;
+  --t-text-secondary: #c4b5fd;
+  --t-text-muted: #a78bfa;
   --t-scrollbar: rgba(168, 85, 247, 0.25);
   --t-code-bg: rgba(0, 0, 0, 0.4);
   --t-code-text: #e879f9;
@@ -853,4 +853,94 @@ body {
   .glass-card {
     border-width: 2px;
   }
+}
+
+/* =========================================
+   字体清晰度兜底层 (全局)
+   解决组件里硬编码 text-white/30, text-gray-400 等
+   在所有主题下都清晰可读
+   使用 [class~="..."] 属性选择器, 不会被 Tailwind 4 转义解析破坏
+   ========================================= */
+
+/* text-white/{n} 系列 - 把"白文字+N%透明度"映射到主题文字 + 主题对应透明度 */
+[class~="text-white/30"] { color: var(--t-text-muted) !important; opacity: 0.9; }
+[class~="text-white/40"] { color: var(--t-text-muted) !important; opacity: 0.95; }
+[class~="text-white/50"] { color: var(--t-text-muted) !important; }
+[class~="text-white/60"] { color: var(--t-text-secondary) !important; }
+[class~="text-white/70"] { color: var(--t-text-secondary) !important; }
+[class~="text-white/80"] { color: var(--t-text) !important; }
+
+/* gray 系列 - 暗主题下偏深、亮主题下偏深, 一律映射到主题变量 */
+[class~="text-gray-300"] { color: var(--t-text-secondary) !important; }
+[class~="text-gray-400"] { color: var(--t-text-secondary) !important; }
+[class~="text-gray-500"] { color: var(--t-text-secondary) !important; opacity: 0.9; }
+[class~="text-gray-600"] { color: var(--t-text) !important; }
+
+/* slate / zinc / neutral 同理 */
+[class~="text-slate-300"] { color: var(--t-text-secondary) !important; }
+[class~="text-slate-400"] { color: var(--t-text-secondary) !important; }
+[class~="text-slate-500"] { color: var(--t-text-secondary) !important; opacity: 0.9; }
+[class~="text-zinc-300"] { color: var(--t-text-secondary) !important; }
+[class~="text-zinc-400"] { color: var(--t-text-secondary) !important; }
+[class~="text-zinc-500"] { color: var(--t-text-secondary) !important; opacity: 0.9; }
+[class~="text-neutral-300"] { color: var(--t-text-secondary) !important; }
+[class~="text-neutral-400"] { color: var(--t-text-secondary) !important; }
+[class~="text-neutral-500"] { color: var(--t-text-secondary) !important; opacity: 0.9; }
+
+/* 自定义 @theme 衍生 utility (text-text-secondary, text-text-muted) */
+[class~="text-text-secondary"] { color: var(--t-text-secondary) !important; }
+[class~="text-text-muted"]     { color: var(--t-text-muted) !important; }
+[class~="text-text-primary"]   { color: var(--t-text) !important; }
+
+/* 强调色 - 在所有主题都映射到主题 accent-light (可读高亮色) */
+[class~="text-indigo-300"] { color: var(--t-accent-light) !important; }
+[class~="text-indigo-400"] { color: var(--t-accent-light) !important; }
+[class~="text-blue-300"]   { color: var(--t-accent-light) !important; }
+[class~="text-blue-400"]   { color: var(--t-accent-light) !important; }
+[class~="text-purple-300"] { color: var(--t-accent-light) !important; }
+[class~="text-purple-400"] { color: var(--t-accent-light) !important; }
+[class~="text-violet-300"] { color: var(--t-accent-light) !important; }
+[class~="text-violet-400"] { color: var(--t-accent-light) !important; }
+[class~="text-fuchsia-300"]{ color: var(--t-accent-light) !important; }
+[class~="text-fuchsia-400"]{ color: var(--t-accent-light) !important; }
+[class~="text-cyan-300"]   { color: var(--t-accent-light) !important; }
+[class~="text-cyan-400"]   { color: var(--t-accent-light) !important; }
+[class~="text-sky-300"]    { color: var(--t-accent-light) !important; }
+[class~="text-sky-400"]    { color: var(--t-accent-light) !important; }
+[class~="text-teal-300"]   { color: var(--t-accent-light) !important; }
+[class~="text-teal-400"]   { color: var(--t-accent-light) !important; }
+[class~="text-pink-300"]   { color: var(--t-accent-light) !important; }
+[class~="text-pink-400"]   { color: var(--t-accent-light) !important; }
+[class~="text-rose-300"]   { color: var(--t-accent-light) !important; }
+[class~="text-rose-400"]   { color: var(--t-accent-light) !important; }
+[class~="text-emerald-300"]{ color: var(--t-accent-light) !important; }
+[class~="text-emerald-400"]{ color: var(--t-accent-light) !important; }
+[class~="text-amber-300"]  { color: var(--t-accent-light) !important; }
+[class~="text-amber-400"]  { color: var(--t-accent-light) !important; }
+[class~="text-yellow-300"] { color: var(--t-accent-light) !important; }
+[class~="text-yellow-400"] { color: var(--t-accent-light) !important; }
+[class~="text-orange-300"] { color: var(--t-accent-light) !important; }
+[class~="text-orange-400"] { color: var(--t-accent-light) !important; }
+
+/* 语义色 (绿/红) 保留原色 - 状态指示 (connected / error) 须可识别
+   在亮主题下用 -600 系列提高对比, 暗主题保持 -400 */
+[data-theme^="light"] [class~="text-green-300"]  { color: #16a34a !important; }
+[data-theme^="light"] [class~="text-green-400"]  { color: #15803d !important; }
+[data-theme^="light"] [class~="text-emerald-300"]{ color: #059669 !important; }
+[data-theme^="light"] [class~="text-emerald-400"]{ color: #047857 !important; }
+[data-theme^="light"] [class~="text-red-300"]    { color: #dc2626 !important; }
+[data-theme^="light"] [class~="text-red-400"]    { color: #b91c1c !important; }
+[data-theme^="light"] [class~="text-rose-300"]   { color: #e11d48 !important; }
+[data-theme^="light"] [class~="text-rose-400"]   { color: #be123c !important; }
+[data-theme^="light"] [class~="text-amber-300"]  { color: #d97706 !important; }
+[data-theme^="light"] [class~="text-amber-400"]  { color: #b45309 !important; }
+[data-theme^="light"] [class~="text-yellow-300"] { color: #ca8a04 !important; }
+[data-theme^="light"] [class~="text-yellow-400"] { color: #a16207 !important; }
+[data-theme^="light"] [class~="text-orange-300"] { color: #ea580c !important; }
+[data-theme^="light"] [class~="text-orange-400"] { color: #c2410c !important; }
+
+/* input/textarea placeholder */
+input::placeholder, textarea::placeholder {
+  color: var(--t-text-muted);
+  opacity: 0.9;
 }

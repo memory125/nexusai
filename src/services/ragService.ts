@@ -1,6 +1,6 @@
 import { Document, DocumentChunk, splitTextIntoChunks, generateSimpleEmbedding } from '../types/rag';
 import { DocumentParser } from './documentParser';
-import { EmbeddingService, EmbeddingConfig, VectorIndex, cosineSimilarity, RAGPerformanceStats } from './embeddingService';
+import { EmbeddingService, EmbeddingConfig, VectorIndex, cosineSimilarity, RAGPerformanceStats, EMBEDDING_MODELS } from './embeddingService';
 
 export class RAGService {
   private embeddingService: EmbeddingService;
@@ -8,12 +8,10 @@ export class RAGService {
 
   constructor(config: EmbeddingConfig) {
     this.embeddingService = new EmbeddingService(config);
-    
-    // Get dimensions from selected model
-    const { EMBEDDING_MODELS } = require('./embeddingService');
+
     const model = EMBEDDING_MODELS.find((m: any) => m.id === config.model);
     const dimensions = model?.dimensions || 384;
-    
+
     this.vectorIndex = new VectorIndex(dimensions);
   }
 
@@ -27,29 +25,52 @@ export class RAGService {
     if (onProgress) onProgress(10);
     const parsedDoc = await DocumentParser.parseFile(file);
     const content = parsedDoc.content;
-    
+
     // 2. Split into chunks
     if (onProgress) onProgress(20);
     const chunkTexts = splitTextIntoChunks(content, 800, 100);
-    
-    // 3. Generate embeddings for all chunks
+
+    if (chunkTexts.length === 0) {
+      throw new Error('文档内容为空,无法分块');
+    }
+
+    // 3. Generate embeddings for all chunks (with per-chunk fallback)
     if (onProgress) onProgress(30);
     const documentId = `doc_${Date.now()}`;
-    
-    const chunkEmbeddings: number[][] = [];
+
+    const chunkEmbeddings: (number[] | null)[] = [];
+    const fallbackDims = this.vectorIndex.getDimensions();
+    let fallbackCount = 0;
+    let lastError = '';
+
     const batchSize = 10;
-    
     for (let i = 0; i < chunkTexts.length; i += batchSize) {
       const batch = chunkTexts.slice(i, i + batchSize);
-      const batchEmbeddings = await Promise.all(
-        batch.map(text => this.embeddingService.generateEmbedding(text))
+      const batchResults = await Promise.all(
+        batch.map(async (text) => {
+          try {
+            return await this.embeddingService.generateEmbedding(text);
+          } catch (e) {
+            fallbackCount++;
+            lastError = e instanceof Error ? e.message : String(e);
+            console.warn(`Chunk ${i} embedding failed, using fallback:`, e);
+            return this.fallbackEmbedding(text, fallbackDims);
+          }
+        })
       );
-      chunkEmbeddings.push(...batchEmbeddings);
-      
+      chunkEmbeddings.push(...batchResults);
+
       if (onProgress) {
-        const progress = 30 + (i / chunkTexts.length) * 60;
+        const progress = 30 + ((i + batch.length) / chunkTexts.length) * 60;
         onProgress(Math.min(progress, 90));
       }
+    }
+
+    if (fallbackCount > 0) {
+      console.warn(
+        `${fallbackCount}/${chunkTexts.length} 个分块使用后备哈希嵌入。` +
+        `最后错误: ${lastError.slice(0, 200)}`
+      );
     }
 
     // 4. Create chunks
@@ -62,15 +83,27 @@ export class RAGService {
         chunkIndex: index,
         totalChunks: chunkTexts.length,
       },
-      embedding: chunkEmbeddings[index],
+      embedding: chunkEmbeddings[index] || this.fallbackEmbedding(chunkText, fallbackDims),
     }));
 
-    // 5. Add to vector index
-    chunks.forEach(chunk => {
-      if (chunk.embedding) {
-        this.vectorIndex.add(chunk.id, chunk.embedding);
+    // 5. Add to vector index (skip mismatched ones)
+    let added = 0;
+    let skipped = 0;
+    chunks.forEach((chunk) => {
+      if (chunk.embedding && chunk.embedding.length === this.vectorIndex.getDimensions()) {
+        try {
+          this.vectorIndex.add(chunk.id, chunk.embedding);
+          added++;
+        } catch {
+          skipped++;
+        }
+      } else {
+        skipped++;
       }
     });
+    if (skipped > 0) {
+      console.warn(`向量索引: 加入 ${added}, 跳过 ${skipped} (维度不匹配)`);
+    }
 
     const document: Document = {
       id: documentId,
@@ -86,6 +119,26 @@ export class RAGService {
     if (onProgress) onProgress(100);
 
     return { document, chunks };
+  }
+
+  // 本地后备嵌入 (固定维度, 永远不抛错)
+  private fallbackEmbedding(text: string, dimensions: number): number[] {
+    const safeDims = Number.isFinite(dimensions) && dimensions > 0 && dimensions < 100000
+      ? Math.floor(dimensions) : 384;
+    const vector = new Array(safeDims).fill(0);
+    const words = String(text || '').toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const wordFreq: Record<string, number> = {};
+    words.forEach((w) => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
+    Object.entries(wordFreq).forEach(([w, f]) => {
+      let hash = 0;
+      for (let i = 0; i < w.length; i++) hash = ((hash << 5) - hash) + w.charCodeAt(i);
+      for (let i = 0; i < 5; i++) {
+        const idx = Math.abs(hash + i * 31) % safeDims;
+        vector[idx] += f * (1 - i * 0.15);
+      }
+    });
+    const mag = Math.sqrt(vector.reduce((s, v) => s + v * v, 0));
+    return mag > 0 ? vector.map(v => v / mag) : vector;
   }
 
   // Search for relevant chunks using vector index with performance tracking
@@ -174,13 +227,11 @@ export class RAGService {
 
   // Get embedding model info
   static getEmbeddingModelInfo(modelId: string) {
-    const { EMBEDDING_MODELS } = require('./embeddingService');
     return EMBEDDING_MODELS.find((m: any) => m.id === modelId);
   }
 
   // Get all available embedding models
   static getAllEmbeddingModels() {
-    const { EMBEDDING_MODELS } = require('./embeddingService');
     return EMBEDDING_MODELS;
   }
 }
