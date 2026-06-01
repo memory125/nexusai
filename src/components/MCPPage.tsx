@@ -140,6 +140,7 @@ export function MCPPage() {
   const [builtinSearchQuery, setBuiltinSearchQuery] = useState('');
   const [runtime, setRuntime] = useState<McpRuntimeInfo | null>(null);
   const [isTauri, setIsTauri] = useState(false);
+  const [isProxy, setIsProxy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
 
@@ -160,14 +161,16 @@ export function MCPPage() {
   const allTools = getAllTools();
   const connectedServers = getConnectedServers();
 
-  // Detect Tauri host and probe for runtimes once on mount.
+  // Detect transport and probe for runtimes once on mount.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const tauri = mcpService.isTauri();
+      const proxy = mcpService.isProxy();
       if (cancelled) return;
       setIsTauri(tauri);
-      if (!tauri) return;
+      setIsProxy(proxy);
+      if (!tauri && !proxy) return;
       try {
         const info = await mcpService.checkRuntime();
         if (!cancelled) setRuntime(info);
@@ -182,10 +185,10 @@ export function MCPPage() {
     };
   }, [mcpService]);
 
-  // Pull live status from the Rust manager on a slow poll so the UI mirrors
-  // the source of truth (which lives in the Tauri process).
+  // Pull live status from the backend on a slow poll so the UI mirrors the
+  // source of truth (which lives in the Tauri process or the dev proxy).
   const refreshAll = useCallback(async () => {
-    if (!isTauri) return;
+    if (!mcpService.isAvailable()) return;
     setRefreshing(true);
     try {
       const list = await mcpService.listServers();
@@ -207,14 +210,14 @@ export function MCPPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [isTauri, mcpService, statuses]);
+  }, [mcpService, statuses]);
 
   useEffect(() => {
-    if (!isTauri) return;
+    if (!mcpService.isAvailable()) return;
     refreshAll();
     const t = setInterval(refreshAll, 5000);
     return () => clearInterval(t);
-  }, [isTauri, refreshAll]);
+  }, [refreshAll, mcpService]);
 
   // Filter servers by search and category
   const filteredServers = useMemo(() => {
@@ -425,21 +428,40 @@ export function MCPPage() {
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'servers' && (
           <div className="space-y-4">
-            {!isTauri && (
+            {!isTauri && !isProxy && (
               <div
                 className="p-4 rounded-xl flex items-start gap-3"
                 style={{
-                  background: 'rgba(234,179,8,0.1)',
-                  border: '1px solid rgba(234,179,8,0.3)',
+                  background: 'rgba(239,68,68,0.1)',
+                  border: '1px solid rgba(239,68,68,0.3)',
                 }}
               >
-                <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: '#eab308' }} />
+                <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: '#f87171' }} />
                 <div className="text-sm">
-                  <div className="font-medium" style={{ color: '#eab308' }}>
-                    当前为浏览器模式，真实 MCP 服务不可用
+                  <div className="font-medium" style={{ color: '#f87171' }}>
+                    未检测到 MCP 后端
                   </div>
                   <div className="mt-1" style={{ color: 'var(--t-text-secondary)' }}>
-                    请用 <code className="px-1 py-0.5 rounded bg-white/10">npm run tauri-dev</code> 启动桌面端，或安装 NexusAI 桌面应用以连接真实 MCP 服务器。
+                    浏览器静态托管环境无法启动子进程。请用 <code className="px-1 py-0.5 rounded bg-white/10">npm run dev</code> 启动开发服务器（自动开启本地 MCP 代理），或用 <code className="px-1 py-0.5 rounded bg-white/10">npm run tauri-dev</code> 启动桌面端。
+                  </div>
+                </div>
+              </div>
+            )}
+            {isProxy && (
+              <div
+                className="p-3 rounded-xl flex items-start gap-3"
+                style={{
+                  background: 'rgba(34,197,94,0.08)',
+                  border: '1px solid rgba(34,197,94,0.3)',
+                }}
+              >
+                <Server className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: '#4ade80' }} />
+                <div className="text-sm">
+                  <div className="font-medium" style={{ color: '#4ade80' }}>
+                    本地 MCP 代理已就绪
+                  </div>
+                  <div className="mt-1" style={{ color: 'var(--t-text-secondary)' }}>
+                    浏览器正在通过 <code className="px-1 py-0.5 rounded bg-white/10">http://127.0.0.1:&lt;port&gt;</code> 调用真实 MCP 子进程（与桌面端相同的 JSON-RPC 2.0 协议）。
                   </div>
                 </div>
               </div>
@@ -757,11 +779,15 @@ export function MCPPage() {
                 <span
                   className="text-xs px-2 py-1 rounded-full"
                   style={{
-                    background: isTauri ? 'rgba(34,197,94,0.2)' : 'rgba(234,179,8,0.2)',
-                    color: isTauri ? '#4ade80' : '#eab308',
+                    background: isTauri
+                      ? 'rgba(34,197,94,0.2)'
+                      : isProxy
+                      ? 'rgba(99,102,241,0.2)'
+                      : 'rgba(234,179,8,0.2)',
+                    color: isTauri ? '#4ade80' : isProxy ? '#a5b4fc' : '#eab308',
                   }}
                 >
-                  {isTauri ? '桌面端 (Tauri)' : '浏览器模式'}
+                  {isTauri ? '桌面端 (Tauri)' : isProxy ? '开发代理 (Node.js)' : '浏览器模式'}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -782,7 +808,8 @@ export function MCPPage() {
               <ul className="space-y-2 text-sm" style={{ color: 'var(--t-text-secondary)' }}>
                 <li>· 大多数 MCP 服务器以 <code>npx -y &lt;package&gt;</code> 形式启动，需要 Node.js ≥ 18。</li>
                 <li>· 官方 Python MCP 服务器使用 <code>uvx &lt;package&gt;</code> 启动，由 Astral 的 uv 提供，安装 <a className="underline" href="https://docs.astral.sh/uv/" target="_blank" rel="noreferrer">uv</a> 后即可使用。</li>
-                <li>· 浏览器模式（Vite dev）下无法启动子进程。请用 <code>npm run tauri-dev</code> 或桌面安装包启动以使用真实 MCP。</li>
+                <li>· <code>npm run dev</code>（Vite）会自动启动 Node.js MCP 代理，浏览器内即可调用真实 MCP。</li>
+                <li>· <code>npm run tauri-dev</code> 或桌面安装包使用 Rust 后端，无端口占用，性能更好。</li>
                 <li>· 启用的服务器越多，初始化时间越长。建议只启用当前对话需要的服务器。</li>
               </ul>
             </div>
