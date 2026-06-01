@@ -6,6 +6,7 @@ import type { OllamaMessage } from './services/ollamaService';
 import { LLMService } from './services/llmService';
 import { executeSkill, getSkillType } from './services/skillExecutor';
 import type { SkillResult } from './services/skillExecutor/types';
+import type { EmbeddingConfig } from './services/embeddingService';
 
 // Module-level AbortController (not serializable, cannot live in Zustand state)
 let currentAbortController: AbortController | null = null;
@@ -206,6 +207,10 @@ interface AppState {
   setLmstudioCustomModel: (m: string) => void;
   lmstudioModels: string[];
   setLmstudioModels: (models: string[]) => void;
+
+  // RAG 嵌入模型配置 (与对话模型完全独立, 单独持久化)
+  embeddingConfig: EmbeddingConfig;
+  setEmbeddingConfig: (config: Partial<EmbeddingConfig>) => void;
 
   agents: Agent[];
   activeAgent: Agent | null;
@@ -1033,6 +1038,15 @@ login: (_email, _password) => {
   lmstudioModels: [],
   setLmstudioModels: (models) => set({ lmstudioModels: models }),
 
+  // RAG 嵌入模型 (默认 simple-hash, 离线无网络, 不会触发 ECONNREFUSED)
+  // 用户可在 设置 → 嵌入模型 或 知识库 → 嵌入设置 中切换到 Ollama/LM Studio/OpenAI/Jina
+  embeddingConfig: {
+    model: 'simple-hash',
+    baseUrl: '',
+    ollamaModel: '',
+  },
+  setEmbeddingConfig: (config) => set(s => ({ embeddingConfig: { ...s.embeddingConfig, ...config } })),
+
   // Agents
   agents: defaultAgents,
   activeAgent: null,
@@ -1124,6 +1138,9 @@ login: (_email, _password) => {
     vllmCustomModel: state.vllmCustomModel,
     lmstudioEndpoint: state.lmstudioEndpoint,
     lmstudioCustomModel: state.lmstudioCustomModel,
+
+    // RAG 嵌入模型 (与对话模型完全独立的持久化字段)
+    embeddingConfig: state.embeddingConfig,
 
     // Agents & Skills (用户自定义 + 启用状态)
     agents: state.agents,

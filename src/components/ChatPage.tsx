@@ -647,13 +647,13 @@ export function ChatPage() {
     createConversation, selectedProvider, selectedModel,
     setSelectedProvider, setSelectedModel, isGenerating, stopGeneration,
     activeAgent, setActiveAgent, agents, skills, activeSkillIds, toggleActiveSkill,
+    embeddingConfig,
   } = useStore();
 
   // Knowledge base store - with defaults
   const kb = useKnowledgeBaseStore();
   const getSelectedKnowledgeBases = kb.getSelectedKnowledgeBases || (() => []);
   const getSelectedChunks = kb.getSelectedChunks || (() => []);
-  const embeddingConfig = kb.embeddingConfig || { model: 'ollama-nomic-embed-text', baseUrl: 'http://localhost:11434', ollamaModel: 'nomic-embed-text' };
 
   const [input, setInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -811,25 +811,30 @@ export function ChatPage() {
     
     // If knowledge bases are selected, retrieve relevant chunks from all selected KBs
     if (selectedChunks.length > 0) {
-      const ragService = new RAGService(embeddingConfig);
-      const searchResult = await ragService.searchRelevantChunks(
-        content,
-        selectedChunks,
-        5
-      );
-      if (searchResult.results.length > 0) {
-        const ragContext = RAGService.buildRAGContext(searchResult.results);
-        content = `${ragContext}\n\n---\n\n用户问题：${content}`;
-        
-        ragSources = searchResult.results.map(result => ({
-          chunkId: result.chunk.id,
-          documentId: result.chunk.metadata.documentId,
-          documentName: result.chunk.metadata.documentName,
-          content: result.chunk.content,
-          similarity: result.score,
-        }));
-        
-        ragStats = searchResult.stats;
+      try {
+        const ragService = new RAGService(embeddingConfig);
+        const searchResult = await ragService.searchRelevantChunks(
+          content,
+          selectedChunks,
+          5
+        );
+        if (searchResult.results.length > 0) {
+          const ragContext = RAGService.buildRAGContext(searchResult.results);
+          content = `${ragContext}\n\n---\n\n用户问题：${content}`;
+
+          ragSources = searchResult.results.map(result => ({
+            chunkId: result.chunk.id,
+            documentId: result.chunk.metadata.documentId,
+            documentName: result.chunk.metadata.documentName,
+            content: result.chunk.content,
+            similarity: result.score,
+          }));
+
+          ragStats = searchResult.stats;
+        }
+      } catch (ragErr) {
+        // RAG 失败不应阻塞对话 —— 优雅降级 (无 RAG 上下文继续聊天)
+        console.warn('[RAG] 检索失败, 已降级为无上下文对话:', ragErr instanceof Error ? ragErr.message : ragErr);
       }
     }
     

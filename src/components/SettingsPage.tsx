@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useStore, modelProviders, themeConfigs } from '../store';
 import type { ThemeId } from '../store';
-import { Settings, User, Key, Palette, Bell, Shield, LogOut, Check, Monitor, Sun, Moon, Sparkles, X, Eye, Zap, Keyboard, RotateCcw } from 'lucide-react';
+import { Settings, User, Key, Palette, Bell, Shield, LogOut, Check, Monitor, Sun, Moon, Sparkles, X, Eye, Zap, Keyboard, RotateCcw, Database, TestTube2 } from 'lucide-react';
 import { ProviderIcon } from './ProviderIcons';
 import { keyboardShortcutsService, ShortcutCategory } from '../services/keyboardShortcutsService';
 import { ttsService } from '../services/ttsService';
+import { EMBEDDING_MODELS, EmbeddingConfig, EmbeddingService } from '../services/embeddingService';
 
 function ThemeCard({ themeId, name, description, preview, isActive, onClick }: {
   themeId: ThemeId;
@@ -158,10 +159,14 @@ function ThemeCard({ themeId, name, description, preview, isActive, onClick }: {
 }
 
 export function SettingsPage() {
-  const { user, logout, selectedProvider, selectedModel, apiKeys, theme, setTheme } = useStore();
+  const { user, logout, selectedProvider, selectedModel, apiKeys, theme, setTheme, embeddingConfig, setEmbeddingConfig } = useStore();
   const currentProvider = modelProviders.find(p => p.id === selectedProvider);
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel);
   const configuredKeys = Object.entries(apiKeys).filter(([, v]) => v);
+
+  // Embedding test state
+  const [embeddingTestResult, setEmbeddingTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isTestingEmbedding, setIsTestingEmbedding] = useState(false);
 
   // Theme preview state
   const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null);
@@ -175,6 +180,23 @@ export function SettingsPage() {
 
   const togglePreference = (key: string) => {
     setPreferences(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Embedding test handler
+  const handleTestEmbedding = async () => {
+    setIsTestingEmbedding(true);
+    setEmbeddingTestResult(null);
+    try {
+      const service = new EmbeddingService(embeddingConfig);
+      const start = performance.now();
+      await service.generateEmbedding('Hello, this is a test of the embedding model.');
+      const duration = Math.round(performance.now() - start);
+      setEmbeddingTestResult({ ok: true, message: `✅ 连接成功 (${duration}ms)` });
+    } catch (e) {
+      setEmbeddingTestResult({ ok: false, message: `❌ ${e instanceof Error ? e.message.slice(0, 120) : String(e)}` });
+    } finally {
+      setIsTestingEmbedding(false);
+    }
   };
 
   // Separate themes into categories
@@ -391,8 +413,66 @@ export function SettingsPage() {
             </div>
           </div>
 
+          {/* RAG Embedding Model (independent from chat model) */}
+          <div className="glass-card rounded-2xl p-6 animate-fade-in" style={{ animationDelay: '125ms' }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Database className="h-4 w-4 text-indigo-400" />
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--t-text)' }}>RAG 嵌入模型</h3>
+            </div>
+            <p className="text-[10px] mb-3" style={{ color: 'var(--t-text-muted)' }}>
+              与对话模型<strong>完全独立</strong>的配置。用于知识库语义检索，不影响聊天功能。
+            </p>
+            <div className="space-y-2">
+              {EMBEDDING_MODELS.map(model => {
+                const isActive = embeddingConfig.model === model.id;
+                return (
+                  <button
+                    key={model.id}
+                    onClick={() => setEmbeddingConfig({
+                      model: model.id,
+                      baseUrl: model.provider === 'lmstudio' ? 'http://localhost:2233' : model.provider === 'ollama' ? 'http://localhost:11434' : embeddingConfig.baseUrl || '',
+                      ollamaModel: model.defaultModelName || (model.provider === 'openai' ? model.id : ''),
+                    })}
+                    className="w-full flex items-center justify-between rounded-lg p-3 transition-all"
+                    style={{
+                      background: isActive ? 'rgba(99,102,241,0.15)' : 'var(--t-glass-card)',
+                      border: `1px solid ${isActive ? 'rgba(99,102,241,0.4)' : 'transparent'}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isActive && <Check className="h-3 w-3 text-indigo-400" />}
+                      {!isActive && <div className="w-3 h-3 rounded-full border border-white/20" />}
+                      <span className="text-xs" style={{ color: 'var(--t-text)' }}>{model.name}</span>
+                      {model.provider === 'local' ? (
+                        <span className="text-[9px] rounded px-1.5 py-0.5 font-medium bg-green-500/15 text-green-400">离线</span>
+                      ) : model.provider === 'lmstudio' || model.provider === 'ollama' ? (
+                        <span className="text-[9px] rounded px-1.5 py-0.5 font-medium bg-orange-500/15 text-orange-400">本地</span>
+                      ) : null}
+                    </div>
+                    <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>{model.dimensions}d</span>
+                  </button>
+                );
+              })}
+            </div>
+            {embeddingTestResult && (
+              <div className={`mt-3 text-xs rounded-lg px-3 py-2 ${embeddingTestResult.ok ? 'bg-green-500/10' : 'bg-red-500/10'}`}
+                style={{ color: embeddingTestResult.ok ? '#4ade80' : '#f87171' }}>
+                {embeddingTestResult.message}
+              </div>
+            )}
+            <button
+              onClick={handleTestEmbedding}
+              disabled={isTestingEmbedding}
+              className="mt-3 flex items-center gap-2 text-xs rounded-lg px-3 py-2 transition-all"
+              style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}
+            >
+              <TestTube2 className="h-3 w-3" />
+              {isTestingEmbedding ? '测试中...' : '测试连接'}
+            </button>
+          </div>
+
           {/* API Keys Status */}
-          <div className="glass-card rounded-2xl p-6 animate-fade-in" style={{ animationDelay: '150ms' }}>
+          <div className="glass-card rounded-2xl p-6 animate-fade-in" style={{ animationDelay: '175ms' }}>
             <div className="flex items-center gap-2 mb-4">
               <Key className="h-4 w-4 text-amber-400" />
               <h3 className="text-sm font-semibold" style={{ color: 'var(--t-text)' }}>API 密钥状态</h3>

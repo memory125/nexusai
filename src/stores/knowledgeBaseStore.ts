@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { KnowledgeBase, Document, DocumentChunk } from '../types/rag';
-import { EmbeddingConfig } from '../services/embeddingService';
 
 export interface KnowledgeBaseState {
   // State
@@ -11,8 +10,7 @@ export interface KnowledgeBaseState {
   selectedTags: string[]; // 标签筛选
   isUploading: boolean;
   uploadProgress: number;
-  embeddingConfig: EmbeddingConfig;
-  
+
   // Actions
   createKnowledgeBase: (name: string, description?: string, tags?: string[]) => string;
   deleteKnowledgeBase: (id: string) => void;
@@ -34,7 +32,6 @@ export interface KnowledgeBaseState {
   getSelectedChunks: () => DocumentChunk[];
   setIsUploading: (uploading: boolean) => void;
   setUploadProgress: (progress: number) => void;
-  setEmbeddingConfig: (config: Partial<EmbeddingConfig>) => void;
 }
 
 export const useKnowledgeBaseStore = create<KnowledgeBaseState>()(
@@ -46,11 +43,6 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseState>()(
       selectedTags: [],
       isUploading: false,
       uploadProgress: 0,
-      embeddingConfig: {
-        model: 'ollama-nomic-embed-text',
-        baseUrl: 'http://localhost:11434',
-        ollamaModel: 'nomic-embed-text',
-      },
 
       createKnowledgeBase: (name, description = '', tags = []) => {
         const id = `kb_${Date.now()}`;
@@ -230,12 +222,6 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseState>()(
 
       setUploadProgress: (progress) => {
         set({ uploadProgress: progress });
-      },
-
-      setEmbeddingConfig: (config) => {
-        set((state) => ({
-          embeddingConfig: { ...state.embeddingConfig, ...config },
-        }));
       },
     }),
     {

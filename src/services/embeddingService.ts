@@ -3,11 +3,11 @@
 export interface EmbeddingModel {
   id: string;
   name: string;
-  provider: 'openai' | 'huggingface' | 'local' | 'ollama';
+  provider: 'openai' | 'huggingface' | 'local' | 'ollama' | 'lmstudio';
   dimensions: number;
   maxTokens: number;
   description: string;
-  defaultModelName?: string; // for ollama: the model name passed to Ollama API
+  defaultModelName?: string; // for ollama/lmstudio: the model name passed to the API
 }
 
 export const EMBEDDING_MODELS: EmbeddingModel[] = [
@@ -86,6 +86,24 @@ export const EMBEDDING_MODELS: EmbeddingModel[] = [
     maxTokens: 10000,
     description: '简单的本地哈希方法，作为后备方案（无语义）',
   },
+  {
+    id: 'lmstudio-nomic-embed-text',
+    name: 'LM Studio nomic-embed-text',
+    provider: 'lmstudio',
+    dimensions: 768,
+    maxTokens: 8192,
+    description: 'LM Studio 本地嵌入 (端口 2233)，真语义、无需联网',
+    defaultModelName: 'text-embedding-nomic-embed-text-v1.5',
+  },
+  {
+    id: 'lmstudio-bge-large',
+    name: 'LM Studio bge-large',
+    provider: 'lmstudio',
+    dimensions: 1024,
+    maxTokens: 512,
+    description: 'LM Studio bge-large 嵌入，准确度更高',
+    defaultModelName: 'text-embedding-bge-large',
+  },
 ];
 
 export interface EmbeddingConfig {
@@ -136,6 +154,8 @@ export class EmbeddingService {
         return this.generateHuggingFaceEmbedding(text, model.id);
       case 'ollama':
         return this.generateOllamaEmbedding(text, model);
+      case 'lmstudio':
+        return this.generateLMStudioEmbedding(text, model);
       case 'local':
       default:
         return this.generateLocalEmbedding(text);
@@ -320,6 +340,41 @@ export class EmbeddingService {
         `原始错误: ${e instanceof Error ? e.message : e}`
       );
     }
+  }
+
+  // LM Studio 本地嵌入 - 通过 POST /v1/embeddings (OpenAI 兼容协议)
+  // docs: https://lmstudio.ai/docs/basics/server
+  private async generateLMStudioEmbedding(text: string, model: EmbeddingModel): Promise<number[]> {
+    const baseUrl = (this.config.baseUrl || 'http://localhost:1234').replace(/\/+$/, '');
+    const modelName = this.config.ollamaModel || model.defaultModelName || 'text-embedding-nomic-embed-text-v1.5';
+    const truncated = text.slice(0, 8000);
+
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (this.config.apiKey) {
+      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+    }
+
+    const res = await fetch(`${baseUrl}/v1/embeddings`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model: modelName, input: truncated }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(
+        `LM Studio 嵌入请求失败 (${res.status}) ${baseUrl}\n` +
+        `请确认 LM Studio 正在运行、嵌入模型已加载、且 Developer → Server 已启用。\n` +
+        `LM Studio 默认端口 1234，用户常用端口 2233 (请在设置中调整)。\n` +
+        `响应: ${errText.slice(0, 200)}`
+      );
+    }
+    const data = await res.json();
+    const embedding = data?.data?.[0]?.embedding;
+    if (!Array.isArray(embedding)) {
+      throw new Error('LM Studio 返回格式异常 (期望 data[0].embedding)');
+    }
+    return embedding;
   }
 
   private generateLocalEmbedding(text: string): number[] {

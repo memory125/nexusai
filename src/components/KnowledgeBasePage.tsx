@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
+import { useStore } from '../store';
 import { RAGService } from '../services/ragService';
 import { DocumentParser } from '../services/documentParser';
 import { EMBEDDING_MODELS, EmbeddingConfig, EmbeddingService } from '../services/embeddingService';
@@ -416,6 +417,9 @@ function DocumentPreviewModal({ document, chunks, onClose }: DocumentPreviewModa
 }
 
 export function KnowledgeBasePage() {
+  const { embeddingConfig, setEmbeddingConfig } = useStore();
+
+  const kb = useKnowledgeBaseStore();
   const {
     knowledgeBases,
     activeKnowledgeBaseId,
@@ -423,7 +427,6 @@ export function KnowledgeBasePage() {
     selectedTags,
     isUploading,
     uploadProgress,
-    embeddingConfig,
     createKnowledgeBase,
     deleteKnowledgeBase,
     setActiveKnowledgeBase,
@@ -439,8 +442,7 @@ export function KnowledgeBasePage() {
     getActiveKnowledgeBase,
     setIsUploading,
     setUploadProgress,
-    setEmbeddingConfig,
-  } = useKnowledgeBaseStore();
+  } = kb;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
