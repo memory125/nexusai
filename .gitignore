@@ -30,3 +30,9 @@ yarn-error.log*
 # Cache
 .cache/
 .parcel-cache/
+
+# Rust / Tauri
+src-tauri/target/
+**/target/
+**/*.rs.bk
+Cargo.lock.bak

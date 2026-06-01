@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useMCPStore } from '../stores/mcpStore';
-import { getMCPService } from '../services/mcpService';
+import { getMCPService, buildEnv } from '../services/mcpService';
+import type { McpRuntimeInfo, McpServerStatus } from '../services/mcpService';
 import type { MCPServerConfig, MCPTool, ToolPermission } from '../types/mcp';
 import { BUILTIN_MCP_SERVERS } from '../types/mcp';
 import {
@@ -72,6 +73,42 @@ function getServerCategory(serverId: string): string {
   return '其他';
 }
 
+function RuntimeRow({
+  label,
+  available,
+  path,
+  version,
+}: {
+  label: string;
+  available: boolean | undefined;
+  path: string | null | undefined;
+  version?: string | null;
+}) {
+  return (
+    <div
+      className="p-3 rounded-lg flex items-center justify-between"
+      style={{ background: 'var(--t-glass-input)' }}
+    >
+      <div>
+        <div className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>{label}</div>
+        <div className="text-xs mt-1 font-mono" style={{ color: 'var(--t-text-muted)' }}>
+          {path || '未检测到'}
+          {version ? ` · ${version}` : ''}
+        </div>
+      </div>
+      <span
+        className="text-xs px-2 py-1 rounded-full"
+        style={{
+          background: available ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+          color: available ? '#4ade80' : '#f87171',
+        }}
+      >
+        {available ? '可用' : '缺失'}
+      </span>
+    </div>
+  );
+}
+
 export function MCPPage() {
   const {
     servers,
@@ -84,13 +121,15 @@ export function MCPPage() {
     toggleServer,
     setServerConnected,
     setServerTools,
+    setServerResources,
+    setServerPrompts,
     setToolPermission,
     setGlobalAutoApprove,
     getAllTools,
     getConnectedServers,
   } = useMCPStore();
 
-  const [activeTab, setActiveTab] = useState<'servers' | 'tools' | 'settings'>('servers');
+  const [activeTab, setActiveTab] = useState<'servers' | 'tools' | 'settings' | 'runtime'>('servers');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBuiltinModal, setShowBuiltinModal] = useState(false);
   const [editingServer, setEditingServer] = useState<MCPServerConfig | null>(null);
@@ -99,6 +138,10 @@ export function MCPPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('全部');
   const [builtinSearchQuery, setBuiltinSearchQuery] = useState('');
+  const [runtime, setRuntime] = useState<McpRuntimeInfo | null>(null);
+  const [isTauri, setIsTauri] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   // Form states for adding/editing server
   const [formData, setFormData] = useState<Partial<MCPServerConfig>>({
@@ -116,6 +159,62 @@ export function MCPPage() {
   const mcpService = getMCPService();
   const allTools = getAllTools();
   const connectedServers = getConnectedServers();
+
+  // Detect Tauri host and probe for runtimes once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const tauri = mcpService.isTauri();
+      if (cancelled) return;
+      setIsTauri(tauri);
+      if (!tauri) return;
+      try {
+        const info = await mcpService.checkRuntime();
+        if (!cancelled) setRuntime(info);
+      } catch (err) {
+        if (!cancelled) {
+          setLastError(String(err));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mcpService]);
+
+  // Pull live status from the Rust manager on a slow poll so the UI mirrors
+  // the source of truth (which lives in the Tauri process).
+  const refreshAll = useCallback(async () => {
+    if (!isTauri) return;
+    setRefreshing(true);
+    try {
+      const list = await mcpService.listServers();
+      const byId: Record<string, McpServerStatus> = {};
+      for (const s of list) {
+        byId[s.id] = {
+          id: s.id,
+          connected: s.state === 'connected',
+          error: s.last_error ?? undefined,
+          tools: statuses[s.id]?.tools ?? [],
+          resources: statuses[s.id]?.resources ?? [],
+          prompts: statuses[s.id]?.prompts ?? [],
+          lastConnected: statuses[s.id]?.lastConnected,
+        };
+      }
+      useMCPStore.setState((prev) => ({ statuses: { ...prev.statuses, ...byId } }));
+    } catch (err) {
+      setLastError(String(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [isTauri, mcpService, statuses]);
+
+  useEffect(() => {
+    if (!isTauri) return;
+    refreshAll();
+    const t = setInterval(refreshAll, 5000);
+    return () => clearInterval(t);
+  }, [isTauri, refreshAll]);
 
   // Filter servers by search and category
   const filteredServers = useMemo(() => {
@@ -149,21 +248,35 @@ export function MCPPage() {
 
   const handleConnect = async (server: MCPServerConfig) => {
     setConnecting(server.id);
+    setLastError(null);
     try {
-      await mcpService.connectServer(server);
-      const tools = await mcpService.listTools(server.id);
+      const connected = await mcpService.connectServer(server, buildEnv(server.env));
       setServerConnected(server.id, true);
-      setServerTools(server.id, tools);
+      setServerTools(server.id, connected.tools);
+      setServerResources(server.id, connected.resources);
+      setServerPrompts(server.id, connected.prompts);
+      // Pull canonical tool counts from the manager so the header shows the
+      // ground truth rather than whatever the store last cached.
+      refreshAll();
     } catch (error) {
-      setServerConnected(server.id, false, String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setLastError(message);
+      setServerConnected(server.id, false, message);
     } finally {
       setConnecting(null);
     }
   };
 
   const handleDisconnect = async (serverId: string) => {
-    await mcpService.disconnectServer(serverId);
-    setServerConnected(serverId, false);
+    setLastError(null);
+    try {
+      await mcpService.disconnectServer(serverId);
+      setServerConnected(serverId, false);
+      refreshAll();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLastError(message);
+    }
   };
 
   const handleAddServer = () => {
@@ -221,6 +334,21 @@ export function MCPPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isTauri && (
+            <button
+              onClick={refreshAll}
+              disabled={refreshing}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+              style={{
+                background: 'var(--t-glass-input)',
+                color: 'var(--t-text-secondary)',
+                border: '1px solid var(--t-glass-border)',
+              }}
+              title="刷新运行时状态"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
           <button
             onClick={() => setShowBuiltinModal(true)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
@@ -279,12 +407,43 @@ export function MCPPage() {
           <Settings className="h-4 w-4" />
           设置
         </button>
+        <button
+          onClick={() => setActiveTab('runtime')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all`}
+          style={{
+            background: activeTab === 'runtime' ? 'var(--t-accent-subtle)' : 'transparent',
+            color: activeTab === 'runtime' ? 'var(--t-accent-light)' : 'var(--t-text-muted)',
+            border: `1px solid ${activeTab === 'runtime' ? 'var(--t-accent-border)' : 'transparent'}`
+          }}
+        >
+          <Terminal className="h-4 w-4" />
+          运行时
+        </button>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'servers' && (
           <div className="space-y-4">
+            {!isTauri && (
+              <div
+                className="p-4 rounded-xl flex items-start gap-3"
+                style={{
+                  background: 'rgba(234,179,8,0.1)',
+                  border: '1px solid rgba(234,179,8,0.3)',
+                }}
+              >
+                <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: '#eab308' }} />
+                <div className="text-sm">
+                  <div className="font-medium" style={{ color: '#eab308' }}>
+                    当前为浏览器模式，真实 MCP 服务不可用
+                  </div>
+                  <div className="mt-1" style={{ color: 'var(--t-text-secondary)' }}>
+                    请用 <code className="px-1 py-0.5 rounded bg-white/10">npm run tauri-dev</code> 启动桌面端，或安装 NexusAI 桌面应用以连接真实 MCP 服务器。
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Search and Filter */}
             <div className="flex gap-3 items-center">
               <div className="flex-1 relative">
@@ -582,6 +741,61 @@ export function MCPPage() {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'runtime' && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-medium" style={{ color: 'var(--t-text)' }}>运行时环境</h3>
+                  <p className="text-xs mt-1" style={{ color: 'var(--t-text-muted)' }}>
+                    检测本机可执行 MCP 服务器的运行时。MCP 服务器通过 stdio 子进程调用这些命令。
+                  </p>
+                </div>
+                <span
+                  className="text-xs px-2 py-1 rounded-full"
+                  style={{
+                    background: isTauri ? 'rgba(34,197,94,0.2)' : 'rgba(234,179,8,0.2)',
+                    color: isTauri ? '#4ade80' : '#eab308',
+                  }}
+                >
+                  {isTauri ? '桌面端 (Tauri)' : '浏览器模式'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <RuntimeRow label="Node.js" available={runtime?.has_node} path={runtime?.node_path} version={runtime?.node_version} />
+                <RuntimeRow label="npx" available={runtime?.has_npx} path={runtime?.npx_path} />
+                <RuntimeRow label="uvx" available={runtime?.has_uvx} path={runtime?.uvx_path} />
+                <RuntimeRow label="uv" available={runtime?.has_uv} path={runtime?.uv_path} />
+                <RuntimeRow label="Python" available={runtime?.has_python} path={runtime?.python_path} />
+                <RuntimeRow label="Docker" available={runtime?.has_docker} path={runtime?.docker_path} />
+              </div>
+              <div className="mt-3 text-xs flex items-center gap-2" style={{ color: 'var(--t-text-muted)' }}>
+                <span>平台：{runtime?.platform ?? '探测中…'}</span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
+              <h3 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>安装建议</h3>
+              <ul className="space-y-2 text-sm" style={{ color: 'var(--t-text-secondary)' }}>
+                <li>· 大多数 MCP 服务器以 <code>npx -y &lt;package&gt;</code> 形式启动，需要 Node.js ≥ 18。</li>
+                <li>· 官方 Python MCP 服务器使用 <code>uvx &lt;package&gt;</code> 启动，由 Astral 的 uv 提供，安装 <a className="underline" href="https://docs.astral.sh/uv/" target="_blank" rel="noreferrer">uv</a> 后即可使用。</li>
+                <li>· 浏览器模式（Vite dev）下无法启动子进程。请用 <code>npm run tauri-dev</code> 或桌面安装包启动以使用真实 MCP。</li>
+                <li>· 启用的服务器越多，初始化时间越长。建议只启用当前对话需要的服务器。</li>
+              </ul>
+            </div>
+
+            {lastError && (
+              <div className="p-4 rounded-xl flex items-start gap-2" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                <AlertCircle className="h-4 w-4 mt-0.5" style={{ color: '#f87171' }} />
+                <div>
+                  <div className="text-sm font-medium" style={{ color: '#f87171' }}>运行时错误</div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--t-text-muted)' }}>{lastError}</div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
