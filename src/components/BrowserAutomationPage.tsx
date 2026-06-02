@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
   Globe, Play, Camera, FileText, Download, Search,
-  X, Clock, RotateCcw, CheckCircle, AlertCircle, Loader2, Zap, Code2, Activity, ListTree, Send
+  X, Clock, RotateCcw, CheckCircle, AlertCircle, Loader2, Zap, Code2, Activity, ListTree, Send,
+  Database, Layers, Save, Trash, BookOpen, Image as ImageIcon, Hash
 } from 'lucide-react';
 import {
   browserAutomationService,
@@ -9,9 +10,12 @@ import {
   AutomationTask,
   WebPageData
 } from '../services/browserAutomationService';
-import { realWorldService, ApiTestResponse, PingResult, BatchScrapeItem, CrawlResult } from '../services/realWorldService';
+import {
+  realWorldService, ApiTestResponse, PingResult, BatchScrapeItem, CrawlResult,
+  dataScrapingService, ScrapeField, FieldTransform, ScrapeRecipe, PaginationResult, StructuredDataResult
+} from '../services/realWorldService';
 
-type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms';
+type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms' | 'schema' | 'pages' | 'structured' | 'recipes';
 
 const COMMON_SELECTORS: { label: string; selector: string; multiple: boolean; hint: string }[] = [
   { label: '标题',  selector: 'h1',                        multiple: false, hint: '页面主标题' },
@@ -47,6 +51,568 @@ function SelectorPresets({ onPick, multiple }: { onPick: (s: { selector: string;
           {s.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+// ====================================================================
+// Schema Extractor Sub-Panel
+// ====================================================================
+
+const TRANSFORM_OPTIONS: { type: FieldTransform['type']; label: string; params?: Array<{ key: string; label: string; type: 'text' | 'number' }> }[] = [
+  { type: 'trim', label: '去首尾空白' },
+  { type: 'lowercase', label: '小写' },
+  { type: 'uppercase', label: '大写' },
+  { type: 'replace', label: '替换文本', params: [
+    { key: 'from', label: '查找', type: 'text' }, { key: 'to', label: '替换为', type: 'text' }
+  ] },
+  { type: 'regex', label: '正则替换', params: [
+    { key: 'pattern', label: 'pattern', type: 'text' }, { key: 'flags', label: 'flags', type: 'text' },
+    { key: 'replace', label: 'replace', type: 'text' }
+  ] },
+  { type: 'prefix', label: '加前缀', params: [{ key: 'value', label: '前缀', type: 'text' }] },
+  { type: 'suffix', label: '加后缀', params: [{ key: 'value', label: '后缀', type: 'text' }] },
+  { type: 'slice', label: '切片', params: [
+    { key: 'start', label: 'start', type: 'number' }, { key: 'end', label: 'end(可选)', type: 'number' }
+  ] },
+  { type: 'attr', label: '取属性', params: [{ key: 'name', label: '属性名', type: 'text' }] },
+  { type: 'number', label: '解析为数字' },
+  { type: 'date', label: '标准化日期' },
+  { type: 'slug', label: 'URL slug' },
+  { type: 'join', label: '多元素连接', params: [{ key: 'sep', label: '分隔符', type: 'text' }] },
+];
+
+function TransformChip({ t, onChange, onRemove }: { t: FieldTransform; onChange: (t: FieldTransform) => void; onRemove: () => void }) {
+  const def = TRANSFORM_OPTIONS.find(o => o.type === t.type);
+  return (
+    <div className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px]" style={{ background: 'var(--t-accent-subtle)', color: 'var(--t-accent-light)' }}>
+      <span>{def?.label || t.type}</span>
+      {def?.params?.map(p => (
+        <input
+          key={p.key}
+          type={p.type}
+          placeholder={p.label}
+          value={(t as any)[p.key] ?? ''}
+          onChange={e => onChange({ ...t, [p.key]: p.type === 'number' ? (parseInt(e.target.value) || 0) : e.target.value } as FieldTransform)}
+          className="w-16 px-1 py-0.5 rounded bg-black/30 text-[10px] outline-none"
+        />
+      ))}
+      <button onClick={onRemove} className="hover:text-red-400 ml-1">×</button>
+    </div>
+  );
+}
+
+function SchemaPanel(props: {
+  activeUrl: string;
+  pageData: WebPageData | null;
+  fields: ScrapeField[];
+  setFields: (f: ScrapeField[]) => void;
+  headers: string;
+  setHeaders: (s: string) => void;
+  recipeName: string;
+  setRecipeName: (s: string) => void;
+  results: Record<string, any>[] | null;
+  setResults: (r: Record<string, any>[] | null) => void;
+  loading: boolean;
+  setLoading: (b: boolean) => void;
+  onSave: () => void;
+}) {
+  const { activeUrl, pageData, fields, setFields, headers, setHeaders, recipeName, setRecipeName, results, setResults, loading, setLoading, onSave } = props;
+
+  const addField = () => setFields([...fields, { name: `field_${fields.length + 1}`, selector: '', multiple: false, transforms: [] }]);
+  const updateField = (i: number, patch: Partial<ScrapeField>) => setFields(fields.map((f, idx) => idx === i ? { ...f, ...patch } : f));
+  const removeField = (i: number) => setFields(fields.filter((_, idx) => idx !== i));
+  const addTransform = (i: number, type: FieldTransform['type']) => {
+    const f = fields[i];
+    const newT: FieldTransform = type === 'replace' ? { type, from: '', to: '' }
+      : type === 'prefix' || type === 'suffix' ? { type, value: '' } as any
+      : type === 'slice' ? { type, start: 0 } as any
+      : type === 'attr' ? { type, name: '' } as any
+      : type === 'join' ? { type, sep: ', ' } as any
+      : type === 'regex' ? { type, pattern: '', flags: 'g', replace: '' } as any
+      : { type } as any;
+    setFields(fields.map((f2, idx) => idx === i ? { ...f2, transforms: [...(f2.transforms || []), newT] } : f2));
+  };
+
+  const handleRun = async () => {
+    setLoading(true);
+    try {
+      let html = '';
+      if (activeSessionId && pageData?.html) {
+        html = pageData.html;
+      } else {
+        if (!activeUrl) { setLoading(false); return; }
+        const r = await dataScrapingService.fetchHtml(activeUrl, headers ? { headers: JSON.parse(headers) } : undefined);
+        if (!r.ok) { setResults([]); setLoading(false); return; }
+        html = r.html;
+      }
+      const result = dataScrapingService.extractMultiField(html, fields);
+      const rows = dataScrapingService.toRows(result);
+      setResults(rows);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportXlsx = () => {
+    if (!results) return;
+    dataScrapingService.exportXlsx(results, `scrape-${Date.now()}.xlsx`, 'Data');
+  };
+  const exportJson = () => {
+    if (!results) return;
+    const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `scrape-${Date.now()}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+  const exportCsv = () => {
+    if (!results || results.length === 0) return;
+    const cols = Object.keys(results[0]);
+    const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [cols.join(','), ...results.map(r => cols.map(c => esc(r[c])).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `scrape-${Date.now()}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const allColumns = results ? Array.from(new Set(results.flatMap(r => Object.keys(r)))) : [];
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+        多字段 Schema 提取:为每个字段定义 CSS 选择器 + 变换管线 → 自动展开为行 → 导出 XLSX/JSON/CSV
+      </p>
+
+      {/* Field rows */}
+      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+        {fields.map((f, i) => (
+          <div key={i} className="rounded-lg p-2 space-y-1.5" style={{ background: 'rgba(0,0,0,0.2)' }}>
+            <div className="flex items-center gap-1.5">
+              <input
+                value={f.name}
+                onChange={e => updateField(i, { name: e.target.value })}
+                placeholder="字段名"
+                className="w-24 glass-input rounded px-2 py-1 text-xs font-mono"
+              />
+              <input
+                value={f.selector}
+                onChange={e => updateField(i, { selector: e.target.value })}
+                placeholder="CSS 选择器"
+                className="flex-1 glass-input rounded px-2 py-1 text-xs font-mono"
+              />
+              <label className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
+                <input type="checkbox" checked={!!f.multiple} onChange={e => updateField(i, { multiple: e.target.checked })} className="rounded" />
+                多
+              </label>
+              <button onClick={() => removeField(i)} className="p-1 text-red-400 hover:bg-red-500/20 rounded">
+                <Trash className="h-3 w-3" />
+              </button>
+            </div>
+            <SelectorPresets onPick={p => updateField(i, { selector: p.selector, multiple: p.multiple })} />
+            <div className="flex flex-wrap items-center gap-1">
+              {(f.transforms || []).map((t, ti) => (
+                <TransformChip
+                  key={ti}
+                  t={t}
+                  onChange={(nt) => updateField(i, { transforms: (f.transforms || []).map((x, xi) => xi === ti ? nt : x) })}
+                  onRemove={() => updateField(i, { transforms: (f.transforms || []).filter((_, xi) => xi !== ti) })}
+                />
+              ))}
+              <select
+                onChange={e => { if (e.target.value) { addTransform(i, e.target.value as any); e.target.value = ''; } }}
+                className="text-[10px] px-1.5 py-1 rounded bg-black/30 outline-none"
+                style={{ color: 'var(--t-text-secondary)' }}
+                defaultValue=""
+              >
+                <option value="" disabled>+ 变换</option>
+                {TRANSFORM_OPTIONS.map(o => <option key={o.type} value={o.type}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button onClick={addField} className="text-xs px-2 py-1 rounded border border-dashed hover:bg-white/5" style={{ borderColor: 'var(--t-glass-border)', color: 'var(--t-text-secondary)' }}>
+        + 添加字段
+      </button>
+
+      {/* Headers */}
+      <details className="text-xs">
+        <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>🔧 自定义 Headers (JSON, 可选)</summary>
+        <textarea
+          value={headers}
+          onChange={e => setHeaders(e.target.value)}
+          placeholder='{"User-Agent": "Mozilla/5.0 ...", "Cookie": "..."}'
+          className="mt-1 w-full glass-input rounded p-2 text-xs font-mono"
+          rows={3}
+        />
+      </details>
+
+      {/* Actions */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={handleRun}
+          disabled={loading}
+          className="px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs disabled:opacity-50 flex items-center gap-1.5"
+        >
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
+          提取 ({fields.length} 字段)
+        </button>
+        {results && results.length > 0 && (
+          <>
+            <button onClick={exportXlsx} className="px-2 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-300 text-xs flex items-center gap-1">
+              <Download className="h-3 w-3" /> XLSX
+            </button>
+            <button onClick={exportJson} className="px-2 py-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-xs">JSON</button>
+            <button onClick={exportCsv} className="px-2 py-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-xs">CSV</button>
+          </>
+        )}
+        <div className="flex-1" />
+        <input
+          value={recipeName}
+          onChange={e => setRecipeName(e.target.value)}
+          placeholder="配方名"
+          className="w-32 glass-input rounded px-2 py-1.5 text-xs"
+        />
+        <button
+          onClick={onSave}
+          disabled={!recipeName.trim() || fields.length === 0}
+          className="px-2 py-1.5 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs disabled:opacity-50 flex items-center gap-1"
+        >
+          <Save className="h-3 w-3" /> 保存配方
+        </button>
+      </div>
+
+      {/* Results table */}
+      {results && results.length > 0 && (
+        <div className="mt-2">
+          <div className="text-xs mb-1 flex items-center justify-between">
+            <span style={{ color: 'var(--t-text-secondary)' }}>共 {results.length} 行 · {allColumns.length} 列</span>
+          </div>
+          <div className="overflow-x-auto max-h-64 border rounded-lg" style={{ borderColor: 'var(--t-glass-border)' }}>
+            <table className="w-full text-[10px]">
+              <thead className="sticky top-0" style={{ background: 'var(--t-bg-secondary)' }}>
+                <tr>
+                  {allColumns.map(c => <th key={c} className="px-2 py-1 text-left font-medium border-b" style={{ borderColor: 'var(--t-glass-border)', color: 'var(--t-accent-light)' }}>{c}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {results.slice(0, 100).map((r, i) => (
+                  <tr key={i} className="hover:bg-white/5">
+                    {allColumns.map(c => <td key={c} className="px-2 py-1 border-b max-w-xs truncate" style={{ borderColor: 'var(--t-glass-border)', color: 'var(--t-text)' }} title={String(r[c])}>{String(r[c] ?? '').slice(0, 120)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {results.length > 100 && <div className="text-[10px] text-center p-1" style={{ color: 'var(--t-text-muted)' }}>仅显示前 100 行,共 {results.length} 行</div>}
+          </div>
+        </div>
+      )}
+      {results && results.length === 0 && (
+        <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>无匹配数据 (检查选择器或字段配置)</div>
+      )}
+    </div>
+  );
+}
+
+// ====================================================================
+// Pagination Panel
+// ====================================================================
+
+function PaginationPanel(props: {
+  url: string; setUrl: (s: string) => void;
+  fields: ScrapeField[]; setFields: (f: ScrapeField[]) => void;
+  nextSelector: string; setNextSelector: (s: string) => void;
+  maxPages: number; setMaxPages: (n: number) => void;
+  delayMs: number; setDelayMs: (n: number) => void;
+  dedupeBy: string; setDedupeBy: (s: string) => void;
+  result: PaginationResult | null;
+  setResult: (r: PaginationResult | null) => void;
+  loading: boolean; setLoading: (b: boolean) => void;
+  progress: { page: number; total: number; items: number };
+}) {
+  const { url, setUrl, fields, setFields, nextSelector, setNextSelector, maxPages, setMaxPages, delayMs, setDelayMs, dedupeBy, setDedupeBy, result, setResult, loading, setLoading, progress } = props;
+
+  const addField = () => setFields([...fields, { name: `field_${fields.length + 1}`, selector: '', multiple: false, transforms: [] }]);
+  const updateField = (i: number, patch: Partial<ScrapeField>) => setFields(fields.map((f, idx) => idx === i ? { ...f, ...patch } : f));
+  const removeField = (i: number) => setFields(fields.filter((_, idx) => idx !== i));
+
+  const handleRun = async () => {
+    if (!url.trim()) return;
+    setLoading(true);
+    setResult(null);
+    try {
+      const r = await dataScrapingService.scrapeWithPagination({
+        startUrl: url.trim(),
+        fields,
+        nextSelector: nextSelector.trim() || undefined,
+        maxPages,
+        delayMs,
+        dedupeBy: dedupeBy.trim() || undefined,
+        onProgress: (page, total, _u, items) => {
+          // progress is shown inline via state setter from outer
+        },
+      });
+      setResult(r);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+        自动翻页爬取:指定起始 URL + 下一页选择器,程序会自动抓取 N 页并合并去重结果。
+      </p>
+      <input
+        value={url}
+        onChange={e => setUrl(e.target.value)}
+        placeholder="起始 URL (例如 https://example.com/news?page=1)"
+        className="w-full glass-input rounded-lg py-2 px-3 text-xs font-mono"
+      />
+      <div className="grid grid-cols-3 gap-2">
+        <input
+          value={nextSelector}
+          onChange={e => setNextSelector(e.target.value)}
+          placeholder="下一页 CSS 选择器"
+          className="glass-input rounded px-2 py-1.5 text-xs font-mono"
+          title="例如 a.next, [rel=next], .pagination .next a"
+        />
+        <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--t-text-secondary)' }}>
+          <span>最多</span>
+          <input type="number" value={maxPages} onChange={e => setMaxPages(parseInt(e.target.value) || 1)} className="w-16 glass-input rounded px-2 py-1 text-xs" />
+          <span>页</span>
+        </label>
+        <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--t-text-secondary)' }}>
+          <span>间隔</span>
+          <input type="number" value={delayMs} onChange={e => setDelayMs(parseInt(e.target.value) || 0)} className="w-20 glass-input rounded px-2 py-1 text-xs" />
+          <span>ms</span>
+        </label>
+      </div>
+      <input
+        value={dedupeBy}
+        onChange={e => setDedupeBy(e.target.value)}
+        placeholder="去重字段名 (可选, 例如 title)"
+        className="w-full glass-input rounded px-2 py-1.5 text-xs"
+      />
+
+      {/* Compact field editor */}
+      <details className="text-xs">
+        <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>📋 字段配置 ({fields.length})</summary>
+        <div className="mt-1 space-y-1.5 max-h-40 overflow-y-auto">
+          {fields.map((f, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <input value={f.name} onChange={e => updateField(i, { name: e.target.value })} placeholder="字段名" className="w-24 glass-input rounded px-2 py-1 text-xs font-mono" />
+              <input value={f.selector} onChange={e => updateField(i, { selector: e.target.value })} placeholder="CSS" className="flex-1 glass-input rounded px-2 py-1 text-xs font-mono" />
+              <label className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
+                <input type="checkbox" checked={!!f.multiple} onChange={e => updateField(i, { multiple: e.target.checked })} className="rounded" />
+                多
+              </label>
+              <button onClick={() => removeField(i)} className="p-1 text-red-400 hover:bg-red-500/20 rounded">
+                <Trash className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <button onClick={addField} className="text-xs px-2 py-1 rounded border border-dashed hover:bg-white/5" style={{ borderColor: 'var(--t-glass-border)', color: 'var(--t-text-secondary)' }}>+ 添加字段</button>
+        </div>
+      </details>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleRun}
+          disabled={loading || !url.trim()}
+          className="px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs disabled:opacity-50 flex items-center gap-1.5"
+        >
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ListTree className="h-3.5 w-3.5" />}
+          {loading ? `爬取中 (第 ${progress.page} 页 / ${progress.total})` : '开始分页爬取'}
+        </button>
+        {result && (
+          <>
+            <span className="text-xs" style={{ color: 'var(--t-text-secondary)' }}>
+              {result.pages.length} 页 · {result.totalItems} 条 · {result.uniqueItems} 去重 · {result.durationMs}ms
+            </span>
+            <button
+              onClick={() => dataScrapingService.exportXlsx(result.flat, `pagination-${Date.now()}.xlsx`, 'Data')}
+              className="px-2 py-1.5 rounded bg-green-500/20 hover:bg-green-500/30 text-green-300 text-xs flex items-center gap-1"
+            >
+              <Download className="h-3 w-3" /> XLSX
+            </button>
+          </>
+        )}
+      </div>
+
+      {result && result.pages.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>📄 页面详情</summary>
+          <div className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+            {result.pages.map(p => (
+              <div key={p.index} className="rounded p-1.5 flex items-center gap-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <span className={p.ok ? 'text-green-400' : 'text-red-400'}>{p.ok ? '✓' : '✗'}</span>
+                <span className="text-[10px] font-mono">第 {p.index} 页</span>
+                <span className="text-[10px] truncate flex-1" style={{ color: 'var(--t-text-muted)' }}>{p.url}</span>
+                <span className="text-[10px]">{p.items.length} 条</span>
+                {p.error && <span className="text-[10px] text-red-400">{p.error}</span>}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// ====================================================================
+// Structured Data Panel
+// ====================================================================
+
+function StructuredDataPanel(props: {
+  pageData: WebPageData | null;
+  url: string;
+  data: StructuredDataResult | null;
+  setData: (d: StructuredDataResult | null) => void;
+  loading: boolean;
+  setLoading: (b: boolean) => void;
+}) {
+  const { pageData, url, data, setData, loading, setLoading } = props;
+
+  const handleExtract = async () => {
+    let html = '';
+    let baseUrl = url;
+    if (pageData?.html) {
+      html = pageData.html;
+    } else if (url) {
+      const r = await dataScrapingService.fetchHtml(url);
+      if (!r.ok) return;
+      html = r.html;
+    } else return;
+    setLoading(true);
+    try {
+      setData(dataScrapingService.extractStructured(html, baseUrl));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copy = (s: any) => navigator.clipboard?.writeText(typeof s === 'string' ? s : JSON.stringify(s, null, 2));
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+        提取页面中嵌入的结构化数据:JSON-LD / OpenGraph / Twitter Card / Meta / RSS 链接。
+      </p>
+      <button
+        onClick={handleExtract}
+        disabled={loading || (!pageData?.html && !url)}
+        className="px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs disabled:opacity-50 flex items-center gap-1.5"
+      >
+        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Database className="h-3.5 w-3.5" />}
+        提取结构化数据
+      </button>
+
+      {data && (
+        <div className="space-y-2 mt-2">
+          {data.jsonLd.length > 0 && (
+            <div className="rounded-lg p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--t-accent-light)' }}>JSON-LD ({data.jsonLd.length})</div>
+              <pre className="text-[10px] font-mono overflow-auto max-h-32" style={{ color: 'var(--t-text-secondary)' }}>
+                {JSON.stringify(data.jsonLd, null, 2)}
+              </pre>
+              <button onClick={() => copy(data.jsonLd)} className="text-[10px] mt-1 px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>复制</button>
+            </div>
+          )}
+          {Object.keys(data.openGraph).length > 0 && (
+            <div className="rounded-lg p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--t-accent-light)' }}>OpenGraph ({Object.keys(data.openGraph).length})</div>
+              <div className="grid grid-cols-2 gap-1 text-[10px]">
+                {Object.entries(data.openGraph).map(([k, v]) => (
+                  <div key={k} className="flex gap-1">
+                    <span className="font-mono text-purple-300">{k}:</span>
+                    <span className="truncate" style={{ color: 'var(--t-text-secondary)' }} title={v}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {Object.keys(data.twitterCard).length > 0 && (
+            <div className="rounded-lg p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--t-accent-light)' }}>Twitter Card ({Object.keys(data.twitterCard).length})</div>
+              <div className="grid grid-cols-2 gap-1 text-[10px]">
+                {Object.entries(data.twitterCard).map(([k, v]) => (
+                  <div key={k} className="flex gap-1">
+                    <span className="font-mono text-blue-300">{k}:</span>
+                    <span className="truncate" style={{ color: 'var(--t-text-secondary)' }} title={v}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {Object.keys(data.meta).length > 0 && (
+            <details className="rounded-lg p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <summary className="text-xs font-medium cursor-pointer" style={{ color: 'var(--t-accent-light)' }}>Meta ({Object.keys(data.meta).length})</summary>
+              <div className="grid grid-cols-2 gap-1 text-[10px] mt-1">
+                {Object.entries(data.meta).slice(0, 30).map(([k, v]) => (
+                  <div key={k} className="flex gap-1">
+                    <span className="font-mono text-gray-400">{k}:</span>
+                    <span className="truncate" style={{ color: 'var(--t-text-secondary)' }} title={v}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+          {data.rssAtom.length > 0 && (
+            <div className="rounded-lg p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--t-accent-light)' }}>RSS / Atom 源</div>
+              {data.rssAtom.map((u, i) => <div key={i} className="text-[10px] font-mono" style={{ color: 'var(--t-text-secondary)' }}>{u}</div>)}
+            </div>
+          )}
+          {data.jsonLd.length === 0 && Object.keys(data.openGraph).length === 0 && Object.keys(data.twitterCard).length === 0 && (
+            <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>未发现结构化数据</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ====================================================================
+// Recipes Library Panel
+// ====================================================================
+
+function RecipesPanel(props: {
+  recipes: ScrapeRecipe[];
+  onLoad: (r: ScrapeRecipe) => void;
+  onDelete: (id: string) => void;
+  onExport: (r: ScrapeRecipe) => void;
+}) {
+  const { recipes, onLoad, onDelete, onExport } = props;
+  return (
+    <div className="space-y-2">
+      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+        已保存的爬取配方 (localStorage 持久化)。点击加载到 Schema 面板。
+      </p>
+      {recipes.length === 0 ? (
+        <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>暂无配方。在 Schema 面板定义字段后保存即可。</div>
+      ) : (
+        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+          {recipes.map(r => (
+            <div key={r.id} className="rounded-lg p-2 flex items-start gap-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <BookOpen className="h-4 w-4 mt-0.5 shrink-0" style={{ color: 'var(--t-accent-light)' }} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium" style={{ color: 'var(--t-text)' }}>{r.name}</div>
+                <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+                  {r.fields.length} 字段 · {new Date(r.updatedAt).toLocaleString('zh-CN')}
+                </div>
+                <div className="text-[10px] truncate" style={{ color: 'var(--t-text-muted)' }}>{r.baseUrl}</div>
+              </div>
+              <button onClick={() => onLoad(r)} className="px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-[10px]">加载</button>
+              <button onClick={() => onExport(r)} className="px-2 py-1 rounded bg-green-500/20 hover:bg-green-500/30 text-green-300 text-[10px]">导出</button>
+              <button onClick={() => onDelete(r.id)} className="p-1 text-red-400 hover:bg-red-500/20 rounded">
+                <Trash className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -90,6 +656,45 @@ export function BrowserAutomationPage() {
   // Form fields state
   const [formFields, setFormFields] = useState<Array<{ tag: string; type: string; name: string; id?: string; placeholder?: string; value?: string; required: boolean; options?: string[] }> | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+
+  // Schema extractor state
+  const [schemaFields, setSchemaFields] = useState<ScrapeField[]>([
+    { name: 'title', selector: 'h1', multiple: false },
+    { name: 'links', selector: 'a[href]', multiple: true },
+  ]);
+  const [schemaResults, setSchemaResults] = useState<Record<string, any>[] | null>(null);
+  const [schemaLoading, setSchemaLoading] = useState(false);
+  const [schemaHeaders, setSchemaHeaders] = useState('');
+  const [schemaRecipeName, setSchemaRecipeName] = useState('');
+
+  // Pagination state
+  const [pagUrl, setPagUrl] = useState('');
+  const [pagFields, setPagFields] = useState<ScrapeField[]>([
+    { name: 'title', selector: 'h1', multiple: false },
+  ]);
+  const [pagNextSel, setPagNextSel] = useState('a.next, a[rel="next"], .pagination .next a');
+  const [pagMax, setPagMax] = useState(5);
+  const [pagDelay, setPagDelay] = useState(800);
+  const [pagResult, setPagResult] = useState<PaginationResult | null>(null);
+  const [pagLoading, setPagLoading] = useState(false);
+  const [pagProgress, setPagProgress] = useState({ page: 0, total: 0, items: 0 });
+  const [pagDedupeBy, setPagDedupeBy] = useState('');
+
+  // URL pattern generator state
+  const [urlPattern, setUrlPattern] = useState('https://example.com/list?page={n}');
+  const [urlStart, setUrlStart] = useState(1);
+  const [urlEnd, setUrlEnd] = useState(20);
+  const [urlPad, setUrlPad] = useState(0);
+  const [generatedUrls, setGeneratedUrls] = useState<string[]>([]);
+
+  // Structured data state
+  const [structuredData, setStructuredData] = useState<StructuredDataResult | null>(null);
+  const [structuredLoading, setStructuredLoading] = useState(false);
+
+  // Recipes state
+  const [recipes, setRecipes] = useState<ScrapeRecipe[]>([]);
+  useEffect(() => { setRecipes(dataScrapingService.loadRecipes()); }, []);
+  const refreshRecipes = () => setRecipes(dataScrapingService.loadRecipes());
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -410,6 +1015,10 @@ export function BrowserAutomationPage() {
       <div className="px-6 py-2 flex items-center gap-1 border-b overflow-x-auto" style={{ borderColor: 'var(--t-glass-border)' }}>
         {[
           { id: 'scrape', label: 'CSS 抓取', icon: Download },
+          { id: 'schema', label: 'Schema 提取', icon: Layers },
+          { id: 'pages', label: '分页爬取', icon: ListTree },
+          { id: 'structured', label: '结构化数据', icon: Database },
+          { id: 'recipes', label: '配方库', icon: BookOpen },
           { id: 'api', label: 'API 测试', icon: Code2 },
           { id: 'ping', label: '连接测试', icon: Activity },
           { id: 'batch', label: '批量抓取', icon: ListTree },
@@ -707,6 +1316,149 @@ export function BrowserAutomationPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Schema Extractor (多字段提取 + 变换) */}
+        {toolTab === 'schema' && (
+          <SchemaPanel
+            activeUrl={url}
+            pageData={pageData}
+            fields={schemaFields}
+            setFields={setSchemaFields}
+            headers={schemaHeaders}
+            setHeaders={setSchemaHeaders}
+            recipeName={schemaRecipeName}
+            setRecipeName={setSchemaRecipeName}
+            results={schemaResults}
+            setResults={setSchemaResults}
+            loading={schemaLoading}
+            setLoading={setSchemaLoading}
+            onSave={() => {
+              if (!schemaRecipeName.trim()) return;
+              const recipe: ScrapeRecipe = {
+                id: `r_${Date.now()}`,
+                name: schemaRecipeName.trim(),
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                baseUrl: url,
+                fields: schemaFields,
+                headers: schemaHeaders ? JSON.parse('{}') : undefined,
+              };
+              dataScrapingService.saveRecipe(recipe);
+              refreshRecipes();
+              setSchemaRecipeName('');
+            }}
+          />
+        )}
+
+        {/* Pagination Scraper */}
+        {toolTab === 'pages' && (
+          <PaginationPanel
+            url={pagUrl}
+            setUrl={setPagUrl}
+            fields={pagFields}
+            setFields={setPagFields}
+            nextSelector={pagNextSel}
+            setNextSelector={setPagNextSel}
+            maxPages={pagMax}
+            setMaxPages={setPagMax}
+            delayMs={pagDelay}
+            setDelayMs={setPagDelay}
+            dedupeBy={pagDedupeBy}
+            setDedupeBy={setPagDedupeBy}
+            result={pagResult}
+            setResult={setPagResult}
+            loading={pagLoading}
+            setLoading={setPagLoading}
+            progress={pagProgress}
+          />
+        )}
+
+        {/* URL Pattern Generator */}
+        {toolTab === 'structured' && (
+          <StructuredDataPanel
+            pageData={pageData}
+            url={url}
+            data={structuredData}
+            setData={setStructuredData}
+            loading={structuredLoading}
+            setLoading={setStructuredLoading}
+          />
+        )}
+
+        {/* Recipes Library */}
+        {toolTab === 'recipes' && (
+          <RecipesPanel
+            recipes={recipes}
+            onLoad={(r) => {
+              setSchemaFields(r.fields);
+              setSchemaRecipeName(r.name);
+              setToolTab('schema');
+            }}
+            onDelete={(id) => { dataScrapingService.deleteRecipe(id); refreshRecipes(); }}
+            onExport={async (r) => {
+              const XLSX = await import('xlsx');
+              const ws = XLSX.utils.json_to_sheet(r.fields.map(f => ({
+                name: f.name, selector: f.selector, attr: f.attr || '', multiple: !!f.multiple,
+                transforms: (f.transforms || []).map(t => t.type).join('|'),
+              })));
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, 'Schema');
+              XLSX.writeFile(wb, `recipe-${r.name}.xlsx`);
+            }}
+          />
+        )}
+
+        {/* URL Pattern Generator (integrated into pages tab) */}
+        {toolTab === 'pages' && (
+          <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--t-glass-border)' }}>
+            <details className="text-xs">
+              <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
+                🧮 URL 模式生成器 (用于配合上方分页爬取)
+              </summary>
+              <div className="mt-2 space-y-2 p-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <div className="flex gap-2 items-center">
+                  <input
+                    value={urlPattern}
+                    onChange={e => setUrlPattern(e.target.value)}
+                    placeholder="https://example.com/p/{n}"
+                    className="flex-1 glass-input rounded px-2 py-1 text-xs font-mono"
+                  />
+                  <input
+                    type="number" value={urlStart}
+                    onChange={e => setUrlStart(parseInt(e.target.value) || 1)}
+                    className="w-16 glass-input rounded px-2 py-1 text-xs"
+                    placeholder="start"
+                  />
+                  <span style={{ color: 'var(--t-text-muted)' }}>→</span>
+                  <input
+                    type="number" value={urlEnd}
+                    onChange={e => setUrlEnd(parseInt(e.target.value) || 1)}
+                    className="w-16 glass-input rounded px-2 py-1 text-xs"
+                    placeholder="end"
+                  />
+                  <input
+                    type="number" value={urlPad}
+                    onChange={e => setUrlPad(parseInt(e.target.value) || 0)}
+                    className="w-16 glass-input rounded px-2 py-1 text-xs"
+                    placeholder="pad"
+                    title="补零位数"
+                  />
+                </div>
+                <button
+                  onClick={() => setGeneratedUrls(dataScrapingService.generateUrls({ pattern: urlPattern, start: urlStart, end: urlEnd, padLength: urlPad }))}
+                  className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs"
+                >
+                  生成 {urlEnd - urlStart + 1} 个 URL
+                </button>
+                {generatedUrls.length > 0 && (
+                  <div className="text-xs font-mono p-2 rounded max-h-32 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text-secondary)' }}>
+                    {generatedUrls.map((u, i) => <div key={i}>{i + 1}. {u}</div>)}
+                  </div>
+                )}
+              </div>
+            </details>
           </div>
         )}
       </div>
