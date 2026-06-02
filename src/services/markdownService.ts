@@ -49,6 +49,8 @@ export interface CrawlConfig {
   bm25?: BM25FilterOptions | false;
   // Two-pass
   twoPass?: boolean;
+  // Network
+  corsProxy?: string;           // 浏览器模式 CORS 失败时回退代理模板 (e.g. 'https://corsproxy.io/?')
 }
 
 export interface CrawlLink {
@@ -79,7 +81,7 @@ export interface MarkdownResult {
   internal_links: CrawlLink[];
   external_links: CrawlLink[];
   media: CrawlMedia[];
-  metadata: { title?: string; description?: string; lang?: string; canonical?: string };
+  metadata: { title?: string; description?: string; author?: string; lang?: string; canonical?: string; keywords?: string };
   stats: {
     rawChars: number;
     fitChars: number;
@@ -247,9 +249,11 @@ class MarkdownService {
     const og = (k: string) => doc.querySelector(`meta[property="og:${k}"]`)?.getAttribute('content') || undefined;
     const title = doc.querySelector('title')?.textContent || og('title') || undefined;
     const description = get('meta[name="description"]') || og('description');
+    const author = get('meta[name="author"]') || og('author') || doc.querySelector('meta[name="byl"]')?.getAttribute('content') || undefined;
+    const keywords = get('meta[name="keywords"]') || undefined;
     const lang = doc.documentElement.getAttribute('lang') || undefined;
     const canonical = doc.querySelector('link[rel="canonical"]')?.getAttribute('href');
-    return { title, description, lang, canonical };
+    return { title, description, author, keywords, lang, canonical };
   }
 
   // ========== Links ==========

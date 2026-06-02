@@ -48,8 +48,15 @@ function responseToObject(r: Response, finalUrl: string): HttpResponse {
   };
 }
 
-/** 智能 fetch: Tauri 环境用原生 HTTP(无 CORS), 否则用浏览器 fetch */
-export async function safeFetch(url: string, options: RequestInit = {}): Promise<HttpResponse> {
+/** 智能 fetch: Tauri 环境用原生 HTTP(无 CORS), 否则用浏览器 fetch
+ *  如果提供 corsProxy 模板 (含 {url} 占位符 或 以 ? 结尾), 在浏览器模式
+ *  CORS 失败时自动通过代理重试一次。
+ */
+export async function safeFetch(
+  url: string,
+  options: RequestInit = {},
+  corsProxy?: string,
+): Promise<HttpResponse> {
   const tFetch = await getTauriFetch();
   if (tFetch) {
     try {
@@ -59,8 +66,40 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
       console.warn('[http] Tauri fetch failed, fallback to browser fetch', e);
     }
   }
-  const r = await fetch(url, { credentials: 'omit', ...options });
-  return responseToObject(r, r.url);
+  // 浏览器模式
+  try {
+    const r = await fetch(url, { credentials: 'omit', ...options });
+    return responseToObject(r, r.url);
+  } catch (e) {
+    // CORS 错误 + 有代理 → 重试
+    if (corsProxy) {
+      const proxied = wrapWithProxy(url, corsProxy);
+      console.log(`[http] CORS blocked, retrying via proxy: ${proxied.slice(0, 80)}…`);
+      try {
+        const r = await fetch(proxied, { credentials: 'omit', ...options });
+        return responseToObject(r, url);
+      } catch (e2) {
+        // 抛原始错误
+        throw e;
+      }
+    }
+    throw e;
+  }
+}
+
+/** 把 URL 包到 CORS 代理里
+ *  corsproxy.io 模式:  https://corsproxy.io/?url={url}  → 传 "https://corsproxy.io/?"
+ *  allorigins 模式:  https://api.allorigins.win/raw?url={url} → 传 "https://api.allorigins.win/raw?url="
+ *  含 {url} 占位符: 任何带 {url} 的模板都支持
+ */
+export function wrapWithProxy(url: string, template: string): string {
+  if (template.includes('{url}')) return template.replace(/\{url\}/g, encodeURIComponent(url));
+  // 末尾是 ?  → 追加 url
+  if (template.endsWith('?')) return template + encodeURIComponent(url);
+  // 末尾是 &  → 追加 url=
+  if (template.endsWith('&')) return template + 'url=' + encodeURIComponent(url);
+  // 默认前缀
+  return template + (template.includes('?') ? '&url=' : '?url=') + encodeURIComponent(url);
 }
 
 /** 检查是否在 Tauri 环境运行(异步,首次会加载插件) */

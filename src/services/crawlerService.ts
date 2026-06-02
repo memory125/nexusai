@@ -77,6 +77,7 @@ export interface CrawlDeepConfig {
   retryBackoffMs?: number;      // default 1000
   rotateUserAgent?: boolean;
   customHeaders?: Record<string, string>;
+  corsProxy?: string;           // 浏览器模式 CORS 失败时回退代理模板 (e.g. 'https://corsproxy.io/?')
   // Page
   crawlConfig?: CrawlConfig;    // passed to markdownService.crawl
   // Cache
@@ -164,7 +165,7 @@ export interface SitemapParseResult {
 }
 
 class SitemapService {
-  async fetchSitemap(url: string): Promise<string | null> {
+  async fetchSitemap(url: string, corsProxy?: string): Promise<string | null> {
     // Try common locations
     const tryUrls = [url];
     try {
@@ -175,7 +176,7 @@ class SitemapService {
     } catch {}
     for (const t of tryUrls) {
       try {
-        const r = await safeFetch(t);
+        const r = await safeFetch(t, undefined, corsProxy);
         if (r.ok && (r.headers['content-type'] || '').includes('xml')) {
           return await r.text();
         }
@@ -207,7 +208,7 @@ class SitemapService {
     return result;
   }
 
-  async discover(url: string, maxDepth: number = 2): Promise<string[]> {
+  async discover(url: string, maxDepth: number = 2, corsProxy?: string): Promise<string[]> {
     const collected: string[] = [];
     const visited = new Set<string>();
     const queue: Array<{ url: string; depth: number }> = [{ url, depth: 0 }];
@@ -215,7 +216,7 @@ class SitemapService {
       const { url: cur, depth } = queue.shift()!;
       if (visited.has(cur) || depth > maxDepth) continue;
       visited.add(cur);
-      const xml = await this.fetchSitemap(cur);
+      const xml = await this.fetchSitemap(cur, corsProxy);
       if (!xml) continue;
       const parsed = this.parse(xml);
       collected.push(...parsed.urls);
@@ -327,7 +328,7 @@ class CrawlerService {
           ...(cfg.customHeaders || {}),
         };
         const ctrl = cfg.signal ? { signal: cfg.signal } : undefined;
-        const r = await safeFetch(url, { method: 'GET', headers, ...ctrl } as RequestInit);
+        const r = await safeFetch(url, { method: 'GET', headers, ...ctrl } as RequestInit, cfg.corsProxy);
         if (r.status >= 500 || r.status === 429) {
           lastErr = `HTTP ${r.status}`;
           retries++;

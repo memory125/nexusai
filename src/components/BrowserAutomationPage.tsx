@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Globe, Play, Camera, FileText, Download, Search,
   X, Clock, RotateCcw, CheckCircle, AlertCircle, Loader2, Zap, Code2, Activity, ListTree, Send,
-  Database, Layers, Save, Trash, BookOpen, Image as ImageIcon, Hash
+  Database, Layers, Save, Trash, BookOpen, Image as ImageIcon, Hash, Eye, Code, Info, BarChart3, ListOrdered
 } from 'lucide-react';
 import {
   browserAutomationService,
@@ -19,6 +19,72 @@ import { crawlerService, CrawlDeepConfig, CrawledPage, CrawlDeepResult, CrawlPag
 import { isTauriSync, isTauriEnv } from '../services/http';
 
 type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms' | 'schema' | 'pages' | 'structured' | 'recipes' | 'deepcrawl' | 'crawler';
+
+// ============ Safe HTML renderer (XSS-safe) ============
+function sanitizeHtml(html: string): string {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  const root = doc.body.firstElementChild as HTMLElement | null;
+  if (!root) return '';
+  // Strip dangerous elements
+  root.querySelectorAll('script,style,iframe,object,embed,form,link,meta,base').forEach(el => el.remove());
+  // Strip on* attributes + javascript: urls
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const el = node as HTMLElement;
+    for (const attr of Array.from(el.attributes)) {
+      const n = attr.name.toLowerCase();
+      if (n.startsWith('on') || (attr.value && /^\s*javascript:/i.test(attr.value))) el.removeAttribute(attr.name);
+    }
+  }
+  // Force all links to open in new tab + safe rel
+  root.querySelectorAll('a[href]').forEach(a => {
+    a.setAttribute('target', '_blank');
+    a.setAttribute('rel', 'noopener noreferrer');
+  });
+  // Force images lazy + max-width
+  root.querySelectorAll('img').forEach(img => {
+    img.setAttribute('loading', 'lazy');
+    (img as HTMLImageElement).style.maxWidth = '100%';
+  });
+  return root.innerHTML;
+}
+
+// ============ Markdown TOC extractor ============
+interface TocItem { level: number; text: string; id: string; }
+function extractToc(md: string): TocItem[] {
+  if (!md) return [];
+  const items: TocItem[] = [];
+  const lines = md.split('\n');
+  let inCode = false;
+  const used = new Set<string>();
+  for (const line of lines) {
+    if (/^```/.test(line)) { inCode = !inCode; continue; }
+    if (inCode) continue;
+    const m = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (!m) continue;
+    const level = m[1].length;
+    const text = m[2].trim();
+    let id = text.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!id) id = 'h';
+    let unique = id; let n = 2;
+    while (used.has(unique)) { unique = id + '-' + n++; }
+    used.add(unique);
+    items.push({ level, text, id: unique });
+  }
+  return items;
+}
+
+// Add ids to markdown headers so anchor links work
+function addHeaderIds(md: string, toc: TocItem[]): string {
+  if (!md || toc.length === 0) return md;
+  let i = 0;
+  return md.replace(/^(#{1,6})\s+(.+?)\s*#*\s*$/gm, (full, hashes, text) => {
+    const item = toc[i++];
+    return item ? `${hashes} <a id="${item.id}"></a>${text}` : full;
+  });
+}
 
 const COMMON_SELECTORS: { label: string; selector: string; multiple: boolean; hint: string }[] = [
   { label: '标题',  selector: 'h1',                        multiple: false, hint: '页面主标题' },
@@ -633,8 +699,8 @@ function DeepCrawlPanel(props: {
   setResult: (r: MarkdownResult | null) => void;
   loading: boolean;
   setLoading: (b: boolean) => void;
-  view: 'raw' | 'fit' | 'cited';
-  setView: (v: 'raw' | 'fit' | 'cited') => void;
+  view: 'preview' | 'source' | 'cited' | 'meta';
+  setView: (v: 'preview' | 'source' | 'cited' | 'meta') => void;
 }) {
   const { activeUrl, pageData, config, setConfig, result, setResult, loading, setLoading, view, setView } = props;
 
@@ -642,18 +708,40 @@ function DeepCrawlPanel(props: {
 
   const handleRun = async () => {
     setLoading(true);
+    setResult(null);
     try {
       let html = '';
-      let baseUrl = activeUrl;
-      if (pageData?.html) html = pageData.html;
-      else if (activeUrl) {
-        const r = await dataScrapingService.fetchHtml(activeUrl);
-        if (!r.ok) { setResult(null); setLoading(false); return; }
+      let baseUrl = activeUrl.trim();
+      // Fallback: if user typed a URL into the CSS 范围 field by mistake, recover it
+      if (!baseUrl && config.cssSelector && /^(https?:\/\/|www\.)/i.test(config.cssSelector.trim())) {
+        baseUrl = config.cssSelector.trim();
+        if (!/^https?:\/\//i.test(baseUrl)) baseUrl = 'https://' + baseUrl;
+        updateCfg({ cssSelector: undefined });
+        console.warn('[DeepCrawl] 检测到 CSS 范围里是 URL, 已自动迁移到 URL 栏:', baseUrl);
+      }
+      if (pageData?.html && baseUrl === activeUrl.trim()) {
+        html = pageData.html;
+      } else if (baseUrl) {
+        const r = await dataScrapingService.fetchHtml(baseUrl, undefined, config.corsProxy);
+        if (!r.ok) {
+          const hint = config.corsProxy
+            ? '已启用 CORS 代理但仍失败 — 检查代理 URL 是否有效, 或换其他代理。'
+            : '提示: 在 vite dev 模式下可能受 CORS 限制, 请开启下方「🌐 CORS 代理」或用「智能爬虫」标签, 或运行 Tauri 应用。';
+          alert(`❌ 抓取失败: ${r.error || 'HTTP ' + r.status}\n\nURL: ${baseUrl}\n\n${hint}`);
+          setLoading(false);
+          return;
+        }
         html = r.html;
-        baseUrl = activeUrl;
-      } else return;
+      } else {
+        alert('❌ 请先在顶部 URL 栏输入网址 (例如 https://example.com) 并按「访问」, 或确保已抓取的页面存在。\n\n注意: 「CSS 范围」是 CSS 选择器, 不是 URL。');
+        setLoading(false);
+        return;
+      }
       const out = await markdownService.crawl(html, baseUrl, config);
       setResult(out);
+    } catch (e) {
+      console.error('[DeepCrawl] 异常:', e);
+      alert('❌ 异常: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoading(false);
     }
@@ -667,8 +755,11 @@ function DeepCrawlPanel(props: {
     a.click(); URL.revokeObjectURL(url);
   };
 
-  const md = result ? (view === 'raw' ? result.raw_markdown : view === 'cited' ? result.markdown_with_citations : result.fit_markdown) : '';
+  const md = result ? (view === 'source' ? result.raw_markdown : view === 'cited' ? result.markdown_with_citations : result.fit_markdown) : '';
   const ratio = result ? (result.stats.fitChars / Math.max(result.stats.rawChars, 1) * 100).toFixed(1) : '0';
+  const toc = useMemo(() => extractToc(result?.fit_markdown || ''), [result]);
+  const safePreviewHtml = useMemo(() => result ? sanitizeHtml(addHeaderIds(result.fit_html, toc)) : '', [result, toc]);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="space-y-2">
@@ -679,12 +770,15 @@ function DeepCrawlPanel(props: {
       {/* Quick config row */}
       <div className="grid grid-cols-3 gap-1.5">
         <label className="text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
-          CSS 范围
+          <span>CSS 范围 <span style={{ color: 'var(--t-text-muted)' }}>(不是 URL!)</span></span>
           <input
             value={config.cssSelector || ''}
             onChange={e => updateCfg({ cssSelector: e.target.value || undefined })}
-            placeholder="例如 #main, article"
+            placeholder="例如 #main, article, .post"
             className="w-full glass-input rounded px-2 py-1 text-xs font-mono mt-0.5"
+            style={/^(https?:\/\/|www\.)/i.test((config.cssSelector || '').trim())
+              ? { borderColor: '#f59e0b', background: 'rgba(245,158,11,0.08)' } : undefined}
+            title="CSS 选择器 (例如 #main, article), 不是 URL 网址"
           />
         </label>
         <label className="text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
@@ -738,6 +832,48 @@ function DeepCrawlPanel(props: {
         />
       </details>
 
+      {/* CORS proxy (browser dev mode fallback) */}
+      <div className="rounded p-2 text-[10px]" style={{ background: 'rgba(0,0,0,0.2)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ color: 'var(--t-text-secondary)' }}>
+            🌐 CORS 代理 <span style={{ color: 'var(--t-text-muted)' }}>(浏览器 dev 模式受 CORS 限制时使用)</span>
+          </span>
+          <button
+            onClick={() => updateCfg({ corsProxy: config.corsProxy ? undefined : 'https://corsproxy.io/?' })}
+            className="text-[10px] px-1.5 py-0.5 rounded"
+            style={{
+              background: config.corsProxy ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.05)',
+              color: config.corsProxy ? '#a5b4fc' : 'var(--t-text-secondary)',
+            }}>
+            {config.corsProxy ? '已启用' : '已关闭'}
+          </button>
+        </div>
+        {config.corsProxy !== undefined && (
+          <>
+            <input
+              value={config.corsProxy}
+              onChange={e => updateCfg({ corsProxy: e.target.value || undefined })}
+              placeholder="https://corsproxy.io/?  (支持 {url} 占位符)"
+              className="mt-1 w-full glass-input rounded px-2 py-1 text-xs font-mono"
+            />
+            <div className="flex flex-wrap gap-1 mt-1">
+              {[
+                { l: 'corsproxy.io', v: 'https://corsproxy.io/?' },
+                { l: 'allorigins', v: 'https://api.allorigins.win/raw?url=' },
+                { l: 'codetabs', v: 'https://api.codetabs.com/v1/proxy?quest=' },
+                { l: '关', v: '' },
+              ].map(opt => (
+                <button key={opt.l} onClick={() => updateCfg({ corsProxy: opt.v || undefined })}
+                  className="text-[10px] px-1.5 py-0.5 rounded"
+                  style={{ background: config.corsProxy === opt.v ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)' }}>
+                  {opt.l}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Action row */}
       <div className="flex items-center gap-2">
         <button
@@ -751,17 +887,23 @@ function DeepCrawlPanel(props: {
         {result && (
           <>
             <div className="text-[10px] flex items-center gap-2" style={{ color: 'var(--t-text-muted)' }}>
-              <span>原始 {result.stats.rawChars} 字符</span>
+              <span>原始 {result.stats.rawChars.toLocaleString()}</span>
               <span>→</span>
-              <span className="text-green-400">FIT {result.stats.fitChars} 字符 ({ratio}%)</span>
+              <span className="text-green-400">FIT {result.stats.fitChars.toLocaleString()} ({ratio}%)</span>
               <span>·</span>
-              <span>保留 {result.stats.blocksKept}/{result.stats.blocksTotal} 块</span>
+              <span>{result.stats.blocksKept}/{result.stats.blocksTotal} 块</span>
             </div>
             <div className="flex-1" />
             <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--t-glass-border)' }}>
-              {(['fit', 'raw', 'cited'] as const).map(v => (
-                <button key={v} onClick={() => setView(v)} className="px-2 py-1 text-[10px]" style={{ background: view === v ? 'var(--t-accent-subtle)' : 'transparent', color: view === v ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
-                  {v === 'fit' ? 'Fit' : v === 'raw' ? 'Raw' : '引用'}
+              {([
+                ['preview', '👁 预览', Eye],
+                ['source', '⌨ 源码', Code],
+                ['cited', '🔗 引用', ListOrdered],
+                ['meta', '📊 元数据', BarChart3],
+              ] as const).map(([v, label, Icon]) => (
+                <button key={v} onClick={() => setView(v)} className="px-2 py-1 text-[10px] flex items-center gap-1"
+                  style={{ background: view === v ? 'var(--t-accent-subtle)' : 'transparent', color: view === v ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                  <Icon className="h-3 w-3" />{label}
                 </button>
               ))}
             </div>
@@ -772,52 +914,129 @@ function DeepCrawlPanel(props: {
       {/* Output */}
       {result && (
         <div className="space-y-2">
+          {/* Action bar */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <button onClick={() => copy(md)} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📋 复制 Markdown</button>
-            <button onClick={() => download(md, `crawl-${Date.now()}.md`, 'text/markdown')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>💾 下载 .md</button>
-            <button onClick={() => download(result.fit_html, `crawl-${Date.now()}-fit.html`, 'text/html')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>🌐 fit HTML</button>
-            <button onClick={() => download(JSON.stringify(result, null, 2), `crawl-${Date.now()}.json`, 'application/json')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📦 完整 JSON</button>
-            <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>🔗 {result.internal_links.length} 内链 / {result.external_links.length} 外链 / 🖼️ {result.media.length} 媒体</span>
+            <button onClick={() => copy(md)} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📋 复制</button>
+            <button onClick={() => download(md, `crawl-${Date.now()}.md`, 'text/markdown')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>💾 MD</button>
+            <button onClick={() => download(result.fit_html, `crawl-${Date.now()}-fit.html`, 'text/html')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>🌐 HTML</button>
+            <button onClick={() => download(JSON.stringify(result, null, 2), `crawl-${Date.now()}.json`, 'application/json')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📦 JSON</button>
           </div>
 
-          {/* Markdown preview */}
-          <pre className="p-3 rounded-lg text-[11px] font-mono whitespace-pre-wrap break-words max-h-72 overflow-auto" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', lineHeight: '1.5' }}>
-            {md || '(空)'}
-          </pre>
-
-          {/* Collapsible sections */}
-          <details className="text-[10px]">
-            <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>🔗 链接 ({result.internal_links.length + result.external_links.length})</summary>
-            <div className="mt-1 max-h-32 overflow-y-auto grid grid-cols-2 gap-1">
-              {[...result.internal_links, ...result.external_links].slice(0, 60).map((l, i) => (
-                <div key={i} className="rounded p-1 truncate" style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--t-text-secondary)' }} title={l.href}>
-                  {l.internal ? '🔗' : '🌐'} {l.text || l.href}
+          {/* Stats card */}
+          <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+            <div className="flex items-center justify-between text-[10px]">
+              <span style={{ color: 'var(--t-text-muted)' }}>📊 内容压缩</span>
+              <span className="font-mono" style={{ color: 'var(--t-text-secondary)' }}>
+                <span className="text-gray-400">{result.stats.rawChars.toLocaleString()}</span>
+                <span className="mx-1">→</span>
+                <span className="text-green-400 font-semibold">{result.stats.fitChars.toLocaleString()}</span>
+                <span className="ml-2 text-amber-400">{ratio}%</span>
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.3)' }}>
+              <div className="h-full rounded-full transition-all"
+                style={{ width: `${Math.min(parseFloat(ratio), 100)}%`, background: parseFloat(ratio) > 50 ? 'linear-gradient(90deg,#10b981,#22d3ee)' : 'linear-gradient(90deg,#f59e0b,#10b981)' }} />
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-[10px]">
+              {[
+                { l: '内容块', v: `${result.stats.blocksKept}/${result.stats.blocksTotal}`, c: 'var(--t-text)' },
+                { l: '内链', v: result.internal_links.length, c: 'var(--t-accent-light)' },
+                { l: '外链', v: result.external_links.length, c: 'var(--t-accent-light)' },
+                { l: '媒体', v: result.media.length, c: 'var(--t-accent-light)' },
+              ].map((s, i) => (
+                <div key={i} className="rounded p-1.5 text-center" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                  <div className="text-base font-semibold" style={{ color: s.c }}>{s.v}</div>
+                  <div style={{ color: 'var(--t-text-muted)' }}>{s.l}</div>
                 </div>
               ))}
             </div>
-          </details>
+          </div>
 
-          <details className="text-[10px]">
-            <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>🖼️ 媒体 ({result.media.length})</summary>
-            <div className="mt-1 grid grid-cols-4 gap-1 max-h-40 overflow-y-auto">
-              {result.media.slice(0, 20).map((m, i) => (
-                <div key={i} className="rounded p-1" style={{ background: 'rgba(0,0,0,0.2)' }}>
-                  {m.type === 'image' ? (
-                    <img src={m.src} alt={m.alt} className="w-full h-12 object-cover rounded" onError={e => (e.target as HTMLImageElement).style.display = 'none'} />
-                  ) : (
-                    <div className="h-12 flex items-center justify-center" style={{ color: 'var(--t-text-muted)' }}>🎬 {m.type}</div>
-                  )}
-                  <div className="truncate mt-0.5" title={m.src} style={{ color: 'var(--t-text-muted)' }}>{m.alt || m.src.split('/').pop()}</div>
+          {/* View content */}
+          {view === 'preview' && (
+            <div className="flex gap-2">
+              {/* TOC sidebar */}
+              {toc.length > 0 && (
+                <div className="w-40 flex-shrink-0 rounded-lg p-2 max-h-96 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                  <div className="text-[10px] font-semibold mb-1" style={{ color: 'var(--t-text-secondary)' }}>📑 目录 ({toc.length})</div>
+                  {toc.map((h, i) => (
+                    <a key={i} href={`#${h.id}`} onClick={(e) => { e.preventDefault(); previewRef.current?.querySelector('#' + h.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                      className="block text-[10px] py-0.5 px-1 rounded hover:bg-white/5 truncate"
+                      style={{ paddingLeft: `${(h.level - 1) * 8 + 4}px`, color: 'var(--t-text-muted)' }}>
+                      {h.text}
+                    </a>
+                  ))}
                 </div>
-              ))}
+              )}
+              {/* Rendered HTML */}
+              <div ref={previewRef} className="flex-1 rounded-lg p-4 prose-content max-h-[500px] overflow-y-auto text-sm"
+                style={{ background: 'rgba(0,0,0,0.25)', color: 'var(--t-text)', lineHeight: '1.65' }}
+                dangerouslySetInnerHTML={{ __html: safePreviewHtml || '<p style="color:var(--t-text-muted)">(空)</p>' }} />
             </div>
-          </details>
+          )}
 
-          {result.metadata.title && (
-            <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
-              📄 <strong style={{ color: 'var(--t-text)' }}>{result.metadata.title}</strong>
-              {result.metadata.description && <span> — {result.metadata.description}</span>}
-              {result.metadata.lang && <span> · lang={result.metadata.lang}</span>}
+          {view === 'source' && (
+            <pre className="p-3 rounded-lg text-[11px] font-mono whitespace-pre-wrap break-words max-h-[500px] overflow-auto"
+              style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', lineHeight: '1.6' }}>
+              {md || '(空)'}
+            </pre>
+          )}
+
+          {view === 'cited' && (
+            <pre className="p-3 rounded-lg text-[11px] font-mono whitespace-pre-wrap break-words max-h-[500px] overflow-auto"
+              style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', lineHeight: '1.6' }}>
+              {result.markdown_with_citations || '(无引用)'}
+            </pre>
+          )}
+
+          {view === 'meta' && (
+            <div className="space-y-2 text-[11px]">
+              {/* Metadata */}
+              <div className="rounded p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <div className="font-semibold mb-1" style={{ color: 'var(--t-text-secondary)' }}>📄 页面元数据</div>
+                <div className="space-y-0.5" style={{ color: 'var(--t-text-muted)' }}>
+                  {result.metadata.title && <div>标题: <span style={{ color: 'var(--t-text)' }}>{result.metadata.title}</span></div>}
+                  {result.metadata.description && <div>描述: <span style={{ color: 'var(--t-text)' }}>{result.metadata.description}</span></div>}
+                  {result.metadata.author && <div>作者: <span style={{ color: 'var(--t-text)' }}>{result.metadata.author}</span></div>}
+                  {result.metadata.canonical && <div className="truncate">规范: <a href={result.metadata.canonical} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--t-accent-light)' }}>{result.metadata.canonical}</a></div>}
+                  {result.metadata.lang && <div>语言: <span style={{ color: 'var(--t-text)' }}>{result.metadata.lang}</span></div>}
+                  {result.metadata.keywords && <div>关键词: <span style={{ color: 'var(--t-text)' }}>{result.metadata.keywords}</span></div>}
+                </div>
+              </div>
+
+              {/* Links */}
+              <div className="rounded p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <div className="font-semibold mb-1" style={{ color: 'var(--t-text-secondary)' }}>🔗 链接 ({result.internal_links.length + result.external_links.length})</div>
+                <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-0.5">
+                  {[...result.internal_links, ...result.external_links].slice(0, 80).map((l, i) => (
+                    <a key={i} href={l.href} target="_blank" rel="noopener noreferrer"
+                      className="rounded p-1 truncate text-[10px] block hover:bg-white/5"
+                      style={{ color: l.internal ? 'var(--t-text)' : 'var(--t-text-muted)' }}
+                      title={l.href}>
+                      {l.internal ? '🔗' : '🌐'} {l.text || l.href}
+                    </a>
+                  ))}
+                </div>
+              </div>
+
+              {/* Media */}
+              <div className="rounded p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <div className="font-semibold mb-1" style={{ color: 'var(--t-text-secondary)' }}>🖼️ 媒体 ({result.media.length})</div>
+                {result.media.length > 0 ? (
+                  <div className="grid grid-cols-6 gap-1 max-h-56 overflow-y-auto">
+                    {result.media.slice(0, 30).map((m, i) => (
+                      <a key={i} href={m.src} target="_blank" rel="noopener noreferrer" className="rounded p-1 block" style={{ background: 'rgba(0,0,0,0.3)' }} title={m.src}>
+                        {m.type === 'image' ? (
+                          <img src={m.src} alt={m.alt} className="w-full h-14 object-cover rounded"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        ) : (
+                          <div className="h-14 flex items-center justify-center text-base" style={{ color: 'var(--t-text-muted)' }}>🎬 {m.type}</div>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                ) : <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>(无)</div>}
+              </div>
             </div>
           )}
         </div>
@@ -851,6 +1070,7 @@ function SmartCrawlerPanel(props: {
   useCache: boolean; setUseCache: (b: boolean) => void;
   rotateUA: boolean; setRotateUA: (b: boolean) => void;
   customHeaders: string; setCustomHeaders: (s: string) => void;
+  corsProxy: string; setCorsProxy: (s: string) => void;
   result: CrawlDeepResult | null;
   setResult: (r: CrawlDeepResult | null) => void;
   loading: boolean; setLoading: (b: boolean) => void;
@@ -893,6 +1113,7 @@ function SmartCrawlerPanel(props: {
       useCache: p.useCache,
       rotateUserAgent: p.rotateUA,
       customHeaders,
+      corsProxy: p.corsProxy.trim() || undefined,
       hooks: {
         beforeFetch: (u) => { addLog(`→ ${u.slice(0, 80)}`); },
         afterFetch: (u, ok, ms) => { addLog(`  ${ok ? '✓' : '✗'} ${u.slice(0, 60)} (${ms}ms)`); },
@@ -942,7 +1163,7 @@ function SmartCrawlerPanel(props: {
     p.setLoading(true);
     addLog(`🔍 发现 sitemap: ${p.sitemapUrl}`);
     try {
-      const urls = await crawlerService.sitemap.discover(p.sitemapUrl.trim());
+      const urls = await crawlerService.sitemap.discover(p.sitemapUrl.trim(), 2, p.corsProxy.trim() || undefined);
       p.setSitemapDiscovered(urls);
       p.setUrls(urls.join('\n'));
       addLog(`✅ 发现 ${urls.length} 个 URL`);
@@ -986,6 +1207,38 @@ function SmartCrawlerPanel(props: {
 
   const [tauriMode, setTauriMode] = useState(false);
   useEffect(() => { isTauriEnv().then(setTauriMode); }, []);
+  const [crFilter, setCrFilter] = useState<'all' | 'success' | 'fail' | 'cached'>('all');
+  const [crSort, setCrSort] = useState<'order' | 'score' | 'size' | 'duration' | 'depth'>('order');
+  const [crQuery, setCrQuery] = useState('');
+  const [crExpanded, setCrExpanded] = useState<Set<number>>(new Set());
+  const filteredPages = useMemo(() => {
+    if (!p.result) return [];
+    let pages = p.result.pages.slice();
+    if (crFilter === 'success') pages = pages.filter(x => x.ok && !x.fromCache);
+    else if (crFilter === 'fail') pages = pages.filter(x => !x.ok);
+    else if (crFilter === 'cached') pages = pages.filter(x => x.fromCache);
+    if (crQuery.trim()) {
+      const q = crQuery.toLowerCase();
+      pages = pages.filter(x => x.url.toLowerCase().includes(q) || (x.markdown || '').toLowerCase().includes(q));
+    }
+    if (crSort === 'score') pages.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    else if (crSort === 'size') pages.sort((a, b) => b.sizeBytes - a.sizeBytes);
+    else if (crSort === 'duration') pages.sort((a, b) => b.durationMs - a.durationMs);
+    else if (crSort === 'depth') pages.sort((a, b) => a.depth - b.depth);
+    return pages;
+  }, [p.result, crFilter, crSort, crQuery]);
+  const toggleExpand = (i: number) => {
+    const next = new Set(crExpanded);
+    next.has(i) ? next.delete(i) : next.add(i);
+    setCrExpanded(next);
+  };
+  const crCopy = (s: string) => navigator.clipboard?.writeText(s);
+  const crDownload = (s: string, filename: string, mime: string) => {
+    const blob = new Blob([s], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    a.click(); URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-2">
@@ -997,6 +1250,17 @@ function SmartCrawlerPanel(props: {
         }}>
           {tauriMode ? '🛡️ Tauri 原生 HTTP (无 CORS)' : '⚠️ 浏览器模式 (受 CORS 限制,部分站点可能失败)'}
         </span>
+        {!tauriMode && (
+          <button onClick={() => p.setCorsProxy(p.corsProxy ? '' : 'https://corsproxy.io/?')}
+            className="ml-2 text-[10px] px-1.5 py-0.5 rounded"
+            style={{
+              background: p.corsProxy ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.05)',
+              color: p.corsProxy ? '#a5b4fc' : 'var(--t-text-secondary)',
+            }}
+            title="点击快速启用/禁用 CORS 代理 (corsproxy.io)">
+            🌐 CORS代理 {p.corsProxy ? '开' : '关'}
+          </button>
+        )}
       </p>
 
       {/* Mode tabs */}
@@ -1125,6 +1389,28 @@ function SmartCrawlerPanel(props: {
         <textarea value={p.customHeaders} onChange={e => p.setCustomHeaders(e.target.value)}
           placeholder='自定义 Headers (JSON): {"Authorization": "Bearer ..."}' rows={2}
           className="mt-1 w-full glass-input rounded p-1.5 text-xs font-mono" />
+        <div className="mt-2">
+          <label style={{ color: 'var(--t-text-secondary)' }}>
+            <span className="text-[10px]">🌐 CORS 代理 (浏览器模式 CORS 失败时回退, 留空关闭; 支持 {'{url}'} 占位符或 ? 结尾前缀)</span>
+            <input value={p.corsProxy} onChange={e => p.setCorsProxy(e.target.value)}
+              placeholder="https://corsproxy.io/?"
+              className="w-full glass-input rounded px-2 py-1 text-xs font-mono mt-0.5" />
+          </label>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {[
+              { l: 'corsproxy.io', v: 'https://corsproxy.io/?' },
+              { l: 'allorigins', v: 'https://api.allorigins.win/raw?url=' },
+              { l: 'codetabs', v: 'https://api.codetabs.com/v1/proxy?quest=' },
+              { l: '关', v: '' },
+            ].map(opt => (
+              <button key={opt.l} onClick={() => p.setCorsProxy(opt.v)}
+                className="text-[10px] px-1.5 py-0.5 rounded"
+                style={{ background: p.corsProxy === opt.v ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)' }}>
+                {opt.l}
+              </button>
+            ))}
+          </div>
+        </div>
         <button onClick={() => { crawlerService.clearCache(); addLog('🗑️ 缓存已清空'); }}
           className="mt-1 text-[10px] px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-300">
           🗑️ 清空缓存
@@ -1187,54 +1473,189 @@ function SmartCrawlerPanel(props: {
         </div>
       )}
 
-      {/* Results table */}
-      {p.result && p.result.pages.length > 0 && (
-        <details open className="text-[10px]">
-          <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
-            📑 页面结果 ({p.result.pages.length})
-            {p.result.discoveredUrls.length > p.result.pages.length && ` · 🔍 已发现 ${p.result.discoveredUrls.length} URL`}
-          </summary>
-          <div className="mt-1 max-h-72 overflow-y-auto rounded border" style={{ borderColor: 'var(--t-glass-border)' }}>
-            <table className="w-full">
-              <thead className="sticky top-0" style={{ background: 'var(--t-bg-secondary)' }}>
-                <tr>
-                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>✓</th>
-                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>深</th>
-                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>分</th>
-                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>URL</th>
-                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>大小</th>
-                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>耗时</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.result.pages.map((pg, i) => (
-                  <tr key={i} className="hover:bg-white/5">
-                    <td className="px-1 py-0.5">{pg.ok ? (pg.fromCache ? '💾' : '✓') : '✗'}</td>
-                    <td className="px-1 py-0.5">{pg.depth}</td>
-                    <td className="px-1 py-0.5">{pg.score != null ? pg.score.toFixed(2) : '-'}</td>
-                    <td className="px-1 py-0.5 max-w-xs truncate" title={pg.url}>
-                      {pg.url}
-                      {pg.error && <span className="text-red-400 ml-1">({pg.error.slice(0, 30)})</span>}
-                    </td>
-                    <td className="px-1 py-0.5">{(pg.sizeBytes / 1024).toFixed(1)}k</td>
-                    <td className="px-1 py-0.5">{pg.durationMs}ms{pg.retries > 0 ? ` (×${pg.retries})` : ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Results: stats + filter + page cards */}
+      {p.result && p.result.pages.length > 0 && (() => {
+        const succ = p.result.stats.success;
+        const fail = p.result.stats.failed;
+        const cached = p.result.stats.fromCache;
+        const succRate = p.result.pages.length > 0 ? (succ / p.result.pages.length * 100).toFixed(0) : '0';
+        const avgScore = p.result.stats.relevanceScores && p.result.stats.relevanceScores.length > 0
+          ? (p.result.stats.relevanceScores.reduce((a, b) => a + b, 0) / p.result.stats.relevanceScores.length).toFixed(2) : null;
+        const totalChars = filteredPages.reduce((sum, x) => sum + (x.markdown?.length || 0), 0);
+        return (
+        <div className="space-y-2">
+          {/* Stats summary card */}
+          <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+            <div className="grid grid-cols-4 gap-2 text-[10px]">
+              {[
+                { l: '爬取页', v: p.result.pages.length, c: 'var(--t-text)' },
+                { l: '成功', v: succ, c: '#4ade80' },
+                { l: '失败', v: fail, c: '#f87171' },
+                { l: '缓存', v: cached, c: '#fbbf24' },
+              ].map((s, i) => (
+                <div key={i} className="rounded p-1.5 text-center" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                  <div className="text-base font-semibold" style={{ color: s.c }}>{s.v}</div>
+                  <div style={{ color: 'var(--t-text-muted)' }}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 text-[10px]">
+              <span style={{ color: 'var(--t-text-muted)' }}>成功率</span>
+              <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.3)' }}>
+                <div className="h-full rounded-full" style={{ width: `${succRate}%`, background: 'linear-gradient(90deg,#4ade80,#22d3ee)' }} />
+              </div>
+              <span className="font-mono" style={{ color: '#4ade80' }}>{succRate}%</span>
+            </div>
+            <div className="flex flex-wrap gap-3 text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+              {p.result.stats.maxDepthReached > 0 && <span>🌳 深度 <b style={{ color: 'var(--t-text)' }}>{p.result.stats.maxDepthReached}</b></span>}
+              <span>⏱ <b style={{ color: 'var(--t-text)' }}>{(p.result.stats.durationMs / 1000).toFixed(1)}s</b></span>
+              {p.result.stats.avgPageMs != null && <span>📊 均 <b style={{ color: 'var(--t-text)' }}>{p.result.stats.avgPageMs}ms</b></span>}
+              {avgScore && <span>🎯 相关 <b style={{ color: 'var(--t-text)' }}>{avgScore}</b></span>}
+              {p.result.discoveredUrls.length > p.result.pages.length && <span>🔍 发现 <b style={{ color: 'var(--t-text)' }}>{p.result.discoveredUrls.length}</b></span>}
+              {totalChars > 0 && <span>📝 <b style={{ color: 'var(--t-text)' }}>{(totalChars / 1024).toFixed(1)}k</b> 字符</span>}
+            </div>
           </div>
+
+          {/* Filter / sort / search */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+            <div className="flex rounded overflow-hidden" style={{ border: '1px solid var(--t-glass-border)' }}>
+              {[
+                ['all', `全部 ${p.result.pages.length}`],
+                ['success', `✓ ${succ}`],
+                ['fail', `✗ ${fail}`],
+                ['cached', `💾 ${cached}`],
+              ].map(([k, l]) => (
+                <button key={k} onClick={() => setCrFilter(k as any)}
+                  className="px-2 py-1"
+                  style={{ background: crFilter === k ? 'var(--t-accent-subtle)' : 'transparent', color: crFilter === k ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="flex rounded overflow-hidden" style={{ border: '1px solid var(--t-glass-border)' }}>
+              {([
+                ['order', '顺序'],
+                ['score', '分'],
+                ['size', '大小'],
+                ['duration', '耗时'],
+                ['depth', '深'],
+              ] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setCrSort(k)}
+                  className="px-2 py-1"
+                  style={{ background: crSort === k ? 'var(--t-accent-subtle)' : 'transparent', color: crSort === k ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 min-w-32">
+              <input value={crQuery} onChange={e => setCrQuery(e.target.value)}
+                placeholder="🔍 搜索 URL / 内容..."
+                className="w-full glass-input rounded px-2 py-1 text-[10px]" />
+            </div>
+            <button onClick={() => setCrExpanded(new Set(filteredPages.map((_, i) => i)))} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-muted)' }}>展开</button>
+            <button onClick={() => setCrExpanded(new Set())} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-muted)' }}>收起</button>
+          </div>
+
+          {/* Page cards */}
+          <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
+            {filteredPages.length === 0 && (
+              <div className="text-center py-6 text-[10px]" style={{ color: 'var(--t-text-muted)' }}>无匹配页面</div>
+            )}
+            {filteredPages.map((pg, i) => {
+              const isOpen = crExpanded.has(i);
+              const snippet = (pg.markdown || pg.error || '').replace(/^#+\s*/gm, '').replace(/[*_`#>\-\[\]]/g, '').replace(/\s+/g, ' ').trim().slice(0, 220);
+              const titleMatch = pg.markdown?.match(/^#+\s*(.+)/m);
+              const title = titleMatch?.[1]?.trim() || pg.url.split('/').filter(Boolean).pop() || pg.url;
+              return (
+                <div key={i} className="rounded-lg overflow-hidden" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid var(--t-glass-border)' }}>
+                  <div className="flex items-start gap-2 p-2 cursor-pointer hover:bg-white/5" onClick={() => toggleExpand(i)}>
+                    <div className="text-base pt-0.5">
+                      {pg.ok ? (pg.fromCache ? '💾' : '✓') : '✗'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 text-[10px] flex-wrap" style={{ color: 'var(--t-text-muted)' }}>
+                        <span className="px-1 rounded" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--t-accent-light)' }}>深{pg.depth}</span>
+                        {pg.score != null && <span className="px-1 rounded" style={{ background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>分{pg.score.toFixed(2)}</span>}
+                        <span>{(pg.sizeBytes / 1024).toFixed(1)}k</span>
+                        <span>·</span>
+                        <span>{pg.durationMs}ms{pg.retries > 0 ? ` ×${pg.retries}` : ''}</span>
+                      </div>
+                      <div className="text-xs font-semibold mt-0.5 truncate" style={{ color: 'var(--t-text)' }} title={title}>
+                        {pg.ok ? title : `❌ ${pg.error?.slice(0, 80) || '抓取失败'}`}
+                      </div>
+                      <div className="text-[10px] truncate" style={{ color: 'var(--t-text-muted)' }} title={pg.url}>
+                        {pg.url}
+                      </div>
+                      {!isOpen && pg.ok && snippet && (
+                        <div className="text-[10px] mt-0.5 line-clamp-2" style={{ color: 'var(--t-text-secondary)' }}>
+                          {snippet}…
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] flex flex-col items-end gap-1">
+                      <span style={{ color: 'var(--t-text-muted)' }}>{isOpen ? '▲' : '▼'}</span>
+                      {pg.internalLinks.length + pg.externalLinks.length > 0 && (
+                        <span style={{ color: 'var(--t-text-muted)' }}>🔗{pg.internalLinks.length + pg.externalLinks.length}</span>
+                      )}
+                    </div>
+                  </div>
+                  {isOpen && (
+                    <div className="border-t p-2 space-y-2" style={{ borderColor: 'var(--t-glass-border)', background: 'rgba(0,0,0,0.15)' }}>
+                      <div className="flex flex-wrap gap-1.5 text-[10px]">
+                        <a href={pg.url} target="_blank" rel="noopener noreferrer"
+                          className="px-2 py-0.5 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300">🔗 打开原页</a>
+                        <button onClick={(e) => { e.stopPropagation(); crCopy(pg.markdown || ''); }}
+                          className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📋 复制 MD</button>
+                        <button onClick={(e) => { e.stopPropagation(); crDownload(pg.markdown || '', `${pg.url.replace(/[^a-z0-9]+/gi, '-').slice(-40)}.md`, 'text/markdown'); }}
+                          className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>💾 下载 MD</button>
+                      </div>
+                      {pg.markdown ? (
+                        <pre className="p-2 rounded text-[10px] font-mono whitespace-pre-wrap break-words max-h-64 overflow-y-auto"
+                          style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text-secondary)' }}>
+                          {pg.markdown}
+                        </pre>
+                      ) : (
+                        <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>(无内容)</div>
+                      )}
+                      {(pg.internalLinks.length + pg.externalLinks.length) > 0 && (
+                        <details className="text-[10px]">
+                          <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
+                            🔗 链接 ({pg.internalLinks.length} 内 / {pg.externalLinks.length} 外)
+                          </summary>
+                          <div className="mt-1 max-h-32 overflow-y-auto space-y-0.5">
+                            {[...pg.internalLinks, ...pg.externalLinks].slice(0, 40).map((l, j) => (
+                              <a key={j} href={l} target="_blank" rel="noopener noreferrer"
+                                className="block truncate text-[10px] hover:underline" style={{ color: l.startsWith(new URL(pg.url).origin) ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                                {l}
+                              </a>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           {p.result.discoveredUrls.length > p.result.pages.length && (
-            <details className="mt-1">
-              <summary className="cursor-pointer text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
+            <details className="text-[10px]">
+              <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
                 🔍 未爬取的已发现 URL ({p.result.discoveredUrls.length - p.result.pages.length})
               </summary>
-              <div className="mt-1 max-h-24 overflow-y-auto text-[10px] font-mono" style={{ color: 'var(--t-text-muted)' }}>
-                {p.result.discoveredUrls.filter(u => !p.result!.pages.some(pg => pg.url === u)).slice(0, 50).map((u, i) => <div key={i} className="truncate">{u}</div>)}
+              <div className="mt-1 max-h-32 overflow-y-auto text-[10px] font-mono" style={{ color: 'var(--t-text-muted)' }}>
+                {p.result.discoveredUrls.filter(u => !p.result!.pages.some(pg => pg.url === u)).slice(0, 100).map((u, i) => (
+                  <div key={i} className="truncate hover:text-blue-300">
+                    <a href={u} target="_blank" rel="noopener noreferrer">{u}</a>
+                  </div>
+                ))}
               </div>
             </details>
           )}
-        </details>
-      )}
+        </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1331,10 +1752,11 @@ export function BrowserAutomationPage() {
     bm25: { userQuery: '', bm25Threshold: 1.0 },
     twoPass: true,
     markdownOptions: { ignoreLinks: false, ignoreImages: false, bodyWidth: 0 },
+    corsProxy: 'https://corsproxy.io/?',
   });
   const [dcResult, setDcResult] = useState<MarkdownResult | null>(null);
   const [dcLoading, setDcLoading] = useState(false);
-  const [dcView, setDcView] = useState<'raw' | 'fit' | 'cited'>('fit');
+  const [dcView, setDcView] = useState<'preview' | 'source' | 'cited' | 'meta'>('preview');
 
   // Smart Crawler state (multi-URL / deep crawl / sitemap)
   const [crMode, setCrMode] = useState<'multi' | 'deep' | 'sitemap' | 'prefetch'>('multi');
@@ -1355,6 +1777,7 @@ export function BrowserAutomationPage() {
   const [crUseCache, setCrUseCache] = useState(true);
   const [crRotateUA, setCrRotateUA] = useState(false);
   const [crCustomHeaders, setCrCustomHeaders] = useState('');
+  const [crCorsProxy, setCrCorsProxy] = useState('https://corsproxy.io/?');
   const [crResult, setCrResult] = useState<CrawlDeepResult | null>(null);
   const [crLoading, setCrLoading] = useState(false);
   const [crLog, setCrLog] = useState<string[]>([]);
@@ -2101,6 +2524,7 @@ export function BrowserAutomationPage() {
             useCache={crUseCache} setUseCache={setCrUseCache}
             rotateUA={crRotateUA} setRotateUA={setCrRotateUA}
             customHeaders={crCustomHeaders} setCustomHeaders={setCrCustomHeaders}
+            corsProxy={crCorsProxy} setCorsProxy={setCrCorsProxy}
             result={crResult} setResult={setCrResult}
             loading={crLoading} setLoading={setCrLoading}
             log={crLog} setLog={setCrLog}

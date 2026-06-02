@@ -601,11 +601,12 @@ class DataScrapingService {
   }
 
   /** 抓取单页 HTML (供分页和 URL 列表使用) */
-  async fetchHtml(url: string, options?: RequestInit): Promise<{ ok: boolean; html: string; status: number; error?: string }> {
+  async fetchHtml(url: string, options?: RequestInit, corsProxy?: string): Promise<{ ok: boolean; html: string; status: number; error?: string; proxied?: boolean }> {
     try {
-      const res = await safeFetch(url, { credentials: 'omit', ...options });
+      const res = await safeFetch(url, { credentials: 'omit', ...options }, corsProxy);
       const html = await res.text();
-      return { ok: res.ok, html, status: res.status };
+      const proxied = res.url !== url && (corsProxy ? res.url.includes(new URL(corsProxy.replace(/\{url\}/, '').replace(/\?$/, '').replace(/&$/, '').split('?')[0]).hostname) : false);
+      return { ok: res.ok, html, status: res.status, proxied };
     } catch (e) {
       return { ok: false, html: '', status: 0, error: e instanceof Error ? e.message : String(e) };
     }
