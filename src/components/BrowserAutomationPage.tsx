@@ -13,6 +13,44 @@ import { realWorldService, ApiTestResponse, PingResult, BatchScrapeItem, CrawlRe
 
 type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms';
 
+const COMMON_SELECTORS: { label: string; selector: string; multiple: boolean; hint: string }[] = [
+  { label: '标题',  selector: 'h1',                        multiple: false, hint: '页面主标题' },
+  { label: '所有标题', selector: 'h1, h2, h3',             multiple: true,  hint: '全部标题层级' },
+  { label: '段落',  selector: 'p',                         multiple: true,  hint: '所有段落文本' },
+  { label: '链接',  selector: 'a[href]',                   multiple: true,  hint: '全部超链接' },
+  { label: '图片',  selector: 'img',                       multiple: true,  hint: '图片 src+alt' },
+  { label: '列表',  selector: 'li',                        multiple: true,  hint: '列表项' },
+  { label: '表格行', selector: 'table tr',                 multiple: true,  hint: '表格所有行' },
+  { label: '按钮',  selector: 'button, [role="button"]',   multiple: true,  hint: '可点击元素' },
+  { label: '文章',  selector: 'article',                   multiple: true,  hint: 'article 元素' },
+  { label: '元描述', selector: 'meta[name="description"]', multiple: false, hint: 'meta 描述' },
+  { label: '价格',  selector: '.price, [class*="price" i]', multiple: true, hint: '含 price 的元素' },
+  { label: 'JSON-LD', selector: 'script[type="application/ld+json"]', multiple: false, hint: '结构化数据' },
+];
+
+function SelectorPresets({ onPick, multiple }: { onPick: (s: { selector: string; multiple: boolean }) => void; multiple?: boolean }) {
+  const items = multiple === undefined ? COMMON_SELECTORS : COMMON_SELECTORS.filter(s => s.multiple === multiple);
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {items.map(s => (
+        <button
+          key={s.selector}
+          onClick={() => onPick({ selector: s.selector, multiple: s.multiple })}
+          title={`${s.selector}  ·  ${s.hint}`}
+          className="text-xs px-2 py-1 rounded-md transition-colors hover:scale-105"
+          style={{
+            background: 'var(--t-accent-subtle)',
+            color: 'var(--t-accent-light)',
+            border: '1px solid var(--t-glass-border)',
+          }}
+        >
+          {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function BrowserAutomationPage() {
   const [sessions, setSessions] = useState<BrowserSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -428,6 +466,9 @@ export function BrowserAutomationPage() {
                 {isScraping ? '抓取中' : '抓取'}
               </button>
             </div>
+            <SelectorPresets
+              onPick={p => { setScrapeConfig({ selector: p.selector, multiple: p.multiple }); setScrapeError(null); }}
+            />
             {scrapeError && (
               <div className="mt-2 text-xs text-red-400">⚠️ {scrapeError}</div>
             )}
@@ -595,6 +636,7 @@ export function BrowserAutomationPage() {
                   className="w-full glass-input rounded-lg py-2 px-3 text-xs"
                   style={{ color: 'var(--t-text)' }}
                 />
+                <SelectorPresets onPick={p => setBatchSelector(p.selector)} />
                 <button
                   onClick={handleBatchScrape}
                   disabled={batchLoading || !batchUrls.trim() || !batchSelector.trim()}
@@ -821,7 +863,10 @@ export function BrowserAutomationPage() {
                       {isScraping ? '抓取中...' : '抓取'}
                     </button>
                   </div>
-                  
+                  <SelectorPresets
+                    onPick={p => { setScrapeConfig({ selector: p.selector, multiple: p.multiple }); setScrapeError(null); }}
+                  />
+
                   {scrapeError && (
                     <div className="mb-3 flex items-start gap-2 rounded-lg p-2.5 animate-fade-in" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
                       <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
