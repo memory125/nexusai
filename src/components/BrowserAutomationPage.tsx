@@ -14,8 +14,9 @@ import {
   realWorldService, ApiTestResponse, PingResult, BatchScrapeItem, CrawlResult,
   dataScrapingService, ScrapeField, FieldTransform, ScrapeRecipe, PaginationResult, StructuredDataResult
 } from '../services/realWorldService';
+import { markdownService, MarkdownResult, CrawlConfig } from '../services/markdownService';
 
-type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms' | 'schema' | 'pages' | 'structured' | 'recipes';
+type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms' | 'schema' | 'pages' | 'structured' | 'recipes' | 'deepcrawl';
 
 const COMMON_SELECTORS: { label: string; selector: string; multiple: boolean; hint: string }[] = [
   { label: '标题',  selector: 'h1',                        multiple: false, hint: '页面主标题' },
@@ -617,6 +618,212 @@ function RecipesPanel(props: {
   );
 }
 
+// ====================================================================
+// Deep Crawl Panel (crawl4ai-style pipeline)
+// ====================================================================
+
+function DeepCrawlPanel(props: {
+  activeUrl: string;
+  pageData: WebPageData | null;
+  config: CrawlConfig;
+  setConfig: (c: CrawlConfig) => void;
+  result: MarkdownResult | null;
+  setResult: (r: MarkdownResult | null) => void;
+  loading: boolean;
+  setLoading: (b: boolean) => void;
+  view: 'raw' | 'fit' | 'cited';
+  setView: (v: 'raw' | 'fit' | 'cited') => void;
+}) {
+  const { activeUrl, pageData, config, setConfig, result, setResult, loading, setLoading, view, setView } = props;
+
+  const updateCfg = (patch: Partial<CrawlConfig>) => setConfig({ ...config, ...patch });
+
+  const handleRun = async () => {
+    setLoading(true);
+    try {
+      let html = '';
+      let baseUrl = activeUrl;
+      if (pageData?.html) html = pageData.html;
+      else if (activeUrl) {
+        const r = await dataScrapingService.fetchHtml(activeUrl);
+        if (!r.ok) { setResult(null); setLoading(false); return; }
+        html = r.html;
+        baseUrl = activeUrl;
+      } else return;
+      const out = await markdownService.crawl(html, baseUrl, config);
+      setResult(out);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copy = (s: string) => navigator.clipboard?.writeText(s);
+  const download = (s: string, filename: string, mime: string) => {
+    const blob = new Blob([s], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const md = result ? (view === 'raw' ? result.raw_markdown : view === 'cited' ? result.markdown_with_citations : result.fit_markdown) : '';
+  const ratio = result ? (result.stats.fitChars / Math.max(result.stats.rawChars, 1) * 100).toFixed(1) : '0';
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+        Crawl4AI 风格深度爬取:内容选择 → 启发式剪枝 → BM25 相关性 → Markdown 三态输出
+      </p>
+
+      {/* Quick config row */}
+      <div className="grid grid-cols-3 gap-1.5">
+        <label className="text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
+          CSS 范围
+          <input
+            value={config.cssSelector || ''}
+            onChange={e => updateCfg({ cssSelector: e.target.value || undefined })}
+            placeholder="例如 #main, article"
+            className="w-full glass-input rounded px-2 py-1 text-xs font-mono mt-0.5"
+          />
+        </label>
+        <label className="text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
+          词数阈值
+          <input
+            type="number" value={config.wordCountThreshold ?? 10}
+            onChange={e => updateCfg({ wordCountThreshold: parseInt(e.target.value) || 0 })}
+            className="w-full glass-input rounded px-2 py-1 text-xs mt-0.5"
+          />
+        </label>
+        <label className="text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
+          BM25 查询
+          <input
+            value={config.bm25 && typeof config.bm25 === 'object' ? config.bm25.userQuery : ''}
+            onChange={e => updateCfg({ bm25: { ...(config.bm25 && typeof config.bm25 === 'object' ? config.bm25 : { userQuery: '' }), userQuery: e.target.value } })}
+            placeholder="聚焦主题关键词"
+            className="w-full glass-input rounded px-2 py-1 text-xs mt-0.5"
+          />
+        </label>
+      </div>
+
+      {/* Toggle row */}
+      <div className="flex flex-wrap gap-1.5 text-[10px]">
+        {[
+          ['excludeExternalLinks', '过滤外链'],
+          ['excludeExternalImages', '过滤外图'],
+          ['excludeSocialMediaLinks', '过滤社媒'],
+          ['processIframes', '合并 iframe'],
+          ['removeOverlayElements', '移除遮罩'],
+          ['removeConsentPopups', '移除 Cookie 弹窗'],
+        ].map(([k, label]) => (
+          <label key={k} className="flex items-center gap-1 px-2 py-1 rounded cursor-pointer" style={{ background: (config as any)[k] ? 'var(--t-accent-subtle)' : 'rgba(0,0,0,0.2)', color: (config as any)[k] ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+            <input type="checkbox" checked={!!(config as any)[k]} onChange={e => updateCfg({ [k]: e.target.checked })} className="rounded" />
+            {label}
+          </label>
+        ))}
+        <label className="flex items-center gap-1 px-2 py-1 rounded cursor-pointer" style={{ background: config.twoPass ? 'var(--t-accent-subtle)' : 'rgba(0,0,0,0.2)', color: config.twoPass ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+          <input type="checkbox" checked={!!config.twoPass} onChange={e => updateCfg({ twoPass: e.target.checked })} className="rounded" />
+          🧪 剪枝 + BM25 两阶段
+        </label>
+      </div>
+
+      {/* Excluded tags */}
+      <details className="text-[10px]">
+        <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>🏷️ 排除标签 ({config.excludedTags?.length || 0})</summary>
+        <input
+          value={(config.excludedTags || []).join(', ')}
+          onChange={e => updateCfg({ excludedTags: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+          placeholder="form, nav, footer, header, aside, ..."
+          className="mt-1 w-full glass-input rounded px-2 py-1 text-xs"
+        />
+      </details>
+
+      {/* Action row */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleRun}
+          disabled={loading}
+          className="px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs disabled:opacity-50 flex items-center gap-1.5"
+        >
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
+          深度爬取
+        </button>
+        {result && (
+          <>
+            <div className="text-[10px] flex items-center gap-2" style={{ color: 'var(--t-text-muted)' }}>
+              <span>原始 {result.stats.rawChars} 字符</span>
+              <span>→</span>
+              <span className="text-green-400">FIT {result.stats.fitChars} 字符 ({ratio}%)</span>
+              <span>·</span>
+              <span>保留 {result.stats.blocksKept}/{result.stats.blocksTotal} 块</span>
+            </div>
+            <div className="flex-1" />
+            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--t-glass-border)' }}>
+              {(['fit', 'raw', 'cited'] as const).map(v => (
+                <button key={v} onClick={() => setView(v)} className="px-2 py-1 text-[10px]" style={{ background: view === v ? 'var(--t-accent-subtle)' : 'transparent', color: view === v ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                  {v === 'fit' ? 'Fit' : v === 'raw' ? 'Raw' : '引用'}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Output */}
+      {result && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button onClick={() => copy(md)} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📋 复制 Markdown</button>
+            <button onClick={() => download(md, `crawl-${Date.now()}.md`, 'text/markdown')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>💾 下载 .md</button>
+            <button onClick={() => download(result.fit_html, `crawl-${Date.now()}-fit.html`, 'text/html')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>🌐 fit HTML</button>
+            <button onClick={() => download(JSON.stringify(result, null, 2), `crawl-${Date.now()}.json`, 'application/json')} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📦 完整 JSON</button>
+            <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>🔗 {result.internal_links.length} 内链 / {result.external_links.length} 外链 / 🖼️ {result.media.length} 媒体</span>
+          </div>
+
+          {/* Markdown preview */}
+          <pre className="p-3 rounded-lg text-[11px] font-mono whitespace-pre-wrap break-words max-h-72 overflow-auto" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', lineHeight: '1.5' }}>
+            {md || '(空)'}
+          </pre>
+
+          {/* Collapsible sections */}
+          <details className="text-[10px]">
+            <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>🔗 链接 ({result.internal_links.length + result.external_links.length})</summary>
+            <div className="mt-1 max-h-32 overflow-y-auto grid grid-cols-2 gap-1">
+              {[...result.internal_links, ...result.external_links].slice(0, 60).map((l, i) => (
+                <div key={i} className="rounded p-1 truncate" style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--t-text-secondary)' }} title={l.href}>
+                  {l.internal ? '🔗' : '🌐'} {l.text || l.href}
+                </div>
+              ))}
+            </div>
+          </details>
+
+          <details className="text-[10px]">
+            <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>🖼️ 媒体 ({result.media.length})</summary>
+            <div className="mt-1 grid grid-cols-4 gap-1 max-h-40 overflow-y-auto">
+              {result.media.slice(0, 20).map((m, i) => (
+                <div key={i} className="rounded p-1" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                  {m.type === 'image' ? (
+                    <img src={m.src} alt={m.alt} className="w-full h-12 object-cover rounded" onError={e => (e.target as HTMLImageElement).style.display = 'none'} />
+                  ) : (
+                    <div className="h-12 flex items-center justify-center" style={{ color: 'var(--t-text-muted)' }}>🎬 {m.type}</div>
+                  )}
+                  <div className="truncate mt-0.5" title={m.src} style={{ color: 'var(--t-text-muted)' }}>{m.alt || m.src.split('/').pop()}</div>
+                </div>
+              ))}
+            </div>
+          </details>
+
+          {result.metadata.title && (
+            <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+              📄 <strong style={{ color: 'var(--t-text)' }}>{result.metadata.title}</strong>
+              {result.metadata.description && <span> — {result.metadata.description}</span>}
+              {result.metadata.lang && <span> · lang={result.metadata.lang}</span>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BrowserAutomationPage() {
   const [sessions, setSessions] = useState<BrowserSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -695,6 +902,24 @@ export function BrowserAutomationPage() {
   const [recipes, setRecipes] = useState<ScrapeRecipe[]>([]);
   useEffect(() => { setRecipes(dataScrapingService.loadRecipes()); }, []);
   const refreshRecipes = () => setRecipes(dataScrapingService.loadRecipes());
+
+  // Deep crawl state (crawl4ai-style pipeline)
+  const [dcConfig, setDcConfig] = useState<CrawlConfig>({
+    wordCountThreshold: 10,
+    excludedTags: ['form', 'nav', 'footer', 'header'],
+    excludeExternalLinks: false,
+    excludeSocialMediaLinks: true,
+    excludeExternalImages: true,
+    removeOverlayElements: true,
+    removeConsentPopups: true,
+    pruning: { threshold: 0.45, thresholdType: 'dynamic', minWordThreshold: 5 },
+    bm25: { userQuery: '', bm25Threshold: 1.0 },
+    twoPass: true,
+    markdownOptions: { ignoreLinks: false, ignoreImages: false, bodyWidth: 0 },
+  });
+  const [dcResult, setDcResult] = useState<MarkdownResult | null>(null);
+  const [dcLoading, setDcLoading] = useState(false);
+  const [dcView, setDcView] = useState<'raw' | 'fit' | 'cited'>('fit');
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1018,6 +1243,7 @@ export function BrowserAutomationPage() {
           { id: 'schema', label: 'Schema 提取', icon: Layers },
           { id: 'pages', label: '分页爬取', icon: ListTree },
           { id: 'structured', label: '结构化数据', icon: Database },
+          { id: 'deepcrawl', label: '深度爬取', icon: Layers },
           { id: 'recipes', label: '配方库', icon: BookOpen },
           { id: 'api', label: 'API 测试', icon: Code2 },
           { id: 'ping', label: '连接测试', icon: Activity },
@@ -1407,6 +1633,22 @@ export function BrowserAutomationPage() {
               XLSX.utils.book_append_sheet(wb, ws, 'Schema');
               XLSX.writeFile(wb, `recipe-${r.name}.xlsx`);
             }}
+          />
+        )}
+
+        {/* Deep Crawl (crawl4ai-style pipeline) */}
+        {toolTab === 'deepcrawl' && (
+          <DeepCrawlPanel
+            activeUrl={url}
+            pageData={pageData}
+            config={dcConfig}
+            setConfig={setDcConfig}
+            result={dcResult}
+            setResult={setDcResult}
+            loading={dcLoading}
+            setLoading={setDcLoading}
+            view={dcView}
+            setView={setDcView}
           />
         )}
 
