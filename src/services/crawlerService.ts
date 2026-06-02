@@ -2,6 +2,7 @@
 // Pure browser implementation: deep crawling, adaptive, sitemap, multi-URL, cache, hooks.
 
 import { markdownService, MarkdownResult, CrawlConfig } from './markdownService';
+import { safeFetch } from './http';
 
 export interface CrawlHooks {
   beforeFetch?: (url: string) => void | Promise<void>;
@@ -174,8 +175,8 @@ class SitemapService {
     } catch {}
     for (const t of tryUrls) {
       try {
-        const r = await fetch(t, { credentials: 'omit' });
-        if (r.ok && (r.headers.get('content-type') || '').includes('xml')) {
+        const r = await safeFetch(t);
+        if (r.ok && (r.headers['content-type'] || '').includes('xml')) {
           return await r.text();
         }
       } catch {}
@@ -326,13 +327,13 @@ class CrawlerService {
           ...(cfg.customHeaders || {}),
         };
         const ctrl = cfg.signal ? { signal: cfg.signal } : undefined;
-        const r = await fetch(url, { headers, credentials: 'omit', ...ctrl } as RequestInit);
+        const r = await safeFetch(url, { method: 'GET', headers, ...ctrl } as RequestInit);
         if (r.status >= 500 || r.status === 429) {
           lastErr = `HTTP ${r.status}`;
           retries++;
           if (attempt < maxRetries) { await new Promise(rr => setTimeout(rr, backoff * Math.pow(2, attempt))); continue; }
         }
-        const ct = r.headers.get('content-type') || undefined;
+        const ct = r.headers['content-type'] || undefined;
         const text = await r.text();
         const result = {
           ok: r.ok, html: text, status: r.status, sizeBytes: text.length, contentType: ct,

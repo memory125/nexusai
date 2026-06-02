@@ -1,5 +1,7 @@
 // Real-world browser automation features (all run in browser, no server)
 
+import { safeFetch } from './http';
+
 export interface ApiTestRequest {
   url: string;
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
@@ -80,12 +82,11 @@ class RealWorldService {
     if (req.body && req.method !== 'GET' && req.method !== 'HEAD') {
       init.body = req.body;
     }
-    const res = await fetch(req.url, init);
+    const res = await safeFetch(req.url, init as RequestInit);
     const bodyText = await res.text();
     const durationMs = Math.round(performance.now() - startTime);
-    const headers: Record<string, string> = {};
-    res.headers.forEach((v, k) => { headers[k] = v; });
-    const contentType = res.headers.get('content-type');
+    const headers = res.headers;
+    const contentType = headers['content-type'];
     let bodyJson: any = null;
     if (contentType?.includes('application/json')) {
       try { bodyJson = JSON.parse(bodyText); } catch { /* not valid JSON */ }
@@ -111,7 +112,7 @@ class RealWorldService {
   async ping(url: string, timeout = 10000): Promise<PingResult> {
     const start = performance.now();
     try {
-      const res = await fetch(url, {
+      const res = await safeFetch(url, {
         method: 'HEAD',
         signal: AbortSignal.timeout(timeout),
         redirect: 'follow',
@@ -125,7 +126,7 @@ class RealWorldService {
         durationMs,
         totalDurationMs: durationMs,
         protocol: res.url.startsWith('https') ? 'HTTPS' : 'HTTP',
-        server: res.headers.get('server') || undefined,
+        server: res.headers['server'] || undefined,
       };
     } catch (e) {
       const durationMs = Math.round(performance.now() - start);
@@ -148,7 +149,7 @@ class RealWorldService {
     for (const url of urls) {
       const start = performance.now();
       try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(timeout) });
+        const res = await safeFetch(url, { signal: AbortSignal.timeout(timeout) });
         if (!res.ok) {
           results.push({ url, ok: false, items: [], error: `HTTP ${res.status}`, durationMs: Math.round(performance.now() - start) });
           continue;
@@ -191,7 +192,7 @@ class RealWorldService {
       if (visited.has(url)) continue;
       visited.add(url);
       try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(timeout) });
+        const res = await safeFetch(url, { signal: AbortSignal.timeout(timeout) });
         if (!res.ok) {
           errors.push({ url, error: `HTTP ${res.status}` });
           continue;
@@ -602,7 +603,7 @@ class DataScrapingService {
   /** 抓取单页 HTML (供分页和 URL 列表使用) */
   async fetchHtml(url: string, options?: RequestInit): Promise<{ ok: boolean; html: string; status: number; error?: string }> {
     try {
-      const res = await fetch(url, { credentials: 'omit', ...options });
+      const res = await safeFetch(url, { credentials: 'omit', ...options });
       const html = await res.text();
       return { ok: res.ok, html, status: res.status };
     } catch (e) {
@@ -717,7 +718,7 @@ class DataScrapingService {
   /** 下载图片 */
   async downloadImage(url: string, filename: string): Promise<{ ok: boolean; error?: string }> {
     try {
-      const res = await fetch(url);
+      const res = await safeFetch(url);
       if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
       const blob = await res.blob();
       this.download(blob, filename);

@@ -16,6 +16,7 @@ import {
 } from '../services/realWorldService';
 import { markdownService, MarkdownResult, CrawlConfig } from '../services/markdownService';
 import { crawlerService, CrawlDeepConfig, CrawledPage, CrawlDeepResult, CrawlPageState } from '../services/crawlerService';
+import { isTauriSync, isTauriEnv } from '../services/http';
 
 type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms' | 'schema' | 'pages' | 'structured' | 'recipes' | 'deepcrawl' | 'crawler';
 
@@ -983,10 +984,19 @@ function SmartCrawlerPanel(props: {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `crawl-${Date.now()}.md`; a.click();
   };
 
+  const [tauriMode, setTauriMode] = useState(false);
+  useEffect(() => { isTauriEnv().then(setTauriMode); }, []);
+
   return (
     <div className="space-y-2">
-      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+      <p className="text-xs flex items-center gap-2 flex-wrap" style={{ color: 'var(--t-text-muted)' }}>
         Crawl4AI 风格智能爬虫:多 URL 并发 / BFS·DFS·BestFirst·Adaptive 深度 / Sitemap 发现 / 缓存 / 重试 / 检查点
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px]" style={{
+          background: tauriMode ? 'rgba(34,197,94,0.15)' : 'rgba(234,179,8,0.15)',
+          color: tauriMode ? '#4ade80' : '#facc15',
+        }}>
+          {tauriMode ? '🛡️ Tauri 原生 HTTP (无 CORS)' : '⚠️ 浏览器模式 (受 CORS 限制,部分站点可能失败)'}
+        </span>
       </p>
 
       {/* Mode tabs */}
