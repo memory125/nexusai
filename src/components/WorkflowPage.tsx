@@ -9,6 +9,10 @@ import {
   X,
   Loader2,
   FileText,
+  CheckCircle2,
+  XCircle,
+  Copy,
+  Clock,
 } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -25,6 +29,7 @@ export function WorkflowPage() {
     workflows,
     activeWorkflowId,
     isExecuting,
+    currentExecution,
     createWorkflow,
     deleteWorkflow,
     setActiveWorkflow,
@@ -38,6 +43,7 @@ export function WorkflowPage() {
   const [runInputs, setRunInputs] = useState<Record<string, string>>({});
   const [showRunModal, setShowRunModal] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showResult, setShowResult] = useState(false);
 
   const handleCreate = () => {
     if (newWorkflowName.trim()) {
@@ -54,6 +60,7 @@ export function WorkflowPage() {
       await runWorkflow(selectedWorkflow, runInputs);
       setShowRunModal(false);
       setRunInputs({});
+      setShowResult(true);
     }
   };
 
@@ -174,6 +181,18 @@ export function WorkflowPage() {
                     <Play className="w-3 h-3" />
                     运行
                   </button>
+                  {workflow.lastRunAt && currentExecution?.workflowId === workflow.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowResult(true);
+                      }}
+                      className="p-1.5 hover:bg-white/10 rounded-lg text-gray-300"
+                      title="查看最近执行结果"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -363,6 +382,87 @@ export function WorkflowPage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Execution Result Modal */}
+      {showResult && currentExecution && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-xl border border-white/10 w-full max-w-3xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                {currentExecution.status === 'completed' ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-400" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-red-400" />
+                )}
+                <div>
+                  <h2 className="text-lg font-semibold">执行结果</h2>
+                  <p className="text-xs text-gray-400">
+                    {currentExecution.status === 'completed' ? '运行成功' : '运行失败'}
+                    {currentExecution.duration != null && ` · 用时 ${currentExecution.duration}ms`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowResult(false)}
+                className="p-1 hover:bg-white/10 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 space-y-4">
+              {currentExecution.error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+                  <strong>错误:</strong> {currentExecution.error}
+                </div>
+              )}
+
+              {/* Final output */}
+              {currentExecution.output != null && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-gray-300">最终输出</h3>
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(String(typeof currentExecution.output === 'string' ? currentExecution.output : JSON.stringify(currentExecution.output, null, 2)))}
+                      className="p-1 hover:bg-white/10 rounded text-gray-400"
+                      title="复制"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <pre className="p-3 rounded-lg bg-black/40 border border-white/10 text-sm text-gray-200 whitespace-pre-wrap break-words max-h-96 overflow-auto">
+                    {typeof currentExecution.output === 'string'
+                      ? currentExecution.output
+                      : JSON.stringify(currentExecution.output, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Per-node results */}
+              {currentExecution.nodeResults && Object.keys(currentExecution.nodeResults).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-300 mb-2">节点执行详情</h3>
+                  <div className="space-y-2">
+                    {Object.entries(currentExecution.nodeResults).map(([nodeId, result]: [string, any]) => (
+                      <details key={nodeId} className="rounded-lg border border-white/10 bg-white/5">
+                        <summary className="p-2 cursor-pointer text-sm flex items-center justify-between hover:bg-white/5">
+                          <span className="font-mono text-purple-300">{nodeId}</span>
+                          <span className="text-xs text-gray-400">
+                            {result?.status === 'completed' ? '✓ 成功' : result?.status === 'failed' ? '✗ 失败' : '已完成'}
+                            {result?.duration != null && ` · ${result.duration}ms`}
+                          </span>
+                        </summary>
+                        <pre className="p-3 text-xs text-gray-300 whitespace-pre-wrap break-words max-h-60 overflow-auto border-t border-white/10">
+                          {JSON.stringify(result, null, 2)}
+                        </pre>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

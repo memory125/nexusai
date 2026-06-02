@@ -16,6 +16,11 @@ import type {
   ScriptNodeData,
 } from '../types/workflow';
 import { getMCPService } from './mcpService';
+import { useStore } from '../store';
+import { getOllamaService } from './ollamaService';
+import { LLMService } from './llmService';
+import { RAGService } from './ragService';
+import { useKnowledgeBaseStore } from '../stores/knowledgeBaseStore';
 
 class WorkflowService {
   private executions: Map<string, WorkflowExecution> = new Map();
@@ -259,7 +264,7 @@ class WorkflowService {
   }
 
   /**
-   * Execute LLM node
+   * Execute LLM node - REAL call to the configured LLM
    */
   private async executeLLMNode(data: LLMNodeData, context: Record<string, any>): Promise<any> {
     // Resolve inputs
@@ -267,16 +272,64 @@ class WorkflowService {
     for (const [key, value] of Object.entries(data.inputs)) {
       resolvedInputs[key] = this.resolveTemplate(value, context);
     }
-    
-    // Simulate LLM call (in real implementation, call actual LLM)
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const prompt = resolvedInputs.context || resolvedInputs.message || resolvedInputs.question || '';
-    
+    // Build messages
+    const messages: Array<{ role: 'system'|'user'|'assistant'; content: string }> = [];
+    if (data.systemPrompt) {
+      messages.push({ role: 'system', content: this.resolveTemplate(data.systemPrompt, context) });
+    }
+    const userPrompt = resolvedInputs.question || resolvedInputs.message || resolvedInputs.prompt ||
+      Object.values(resolvedInputs).filter(Boolean).join('\n\n');
+    messages.push({ role: 'user', content: userPrompt });
+
+    // Get model/provider from data, fallback to store's current selection
+    const state = useStore.getState();
+    const provider = data.provider || state.selectedProvider;
+    const model = data.model || state.selectedModel;
+
+    // Call real LLM based on provider
+    let result = '';
+    if (provider === 'ollama') {
+      const ollama = getOllamaService(state.ollamaEndpoint);
+      ollama.setDefaultModel(model);
+      result = await ollama.chat(messages as any, model);
+    } else if (provider === 'lmstudio') {
+      const res = await fetch(`${state.lmstudioEndpoint}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages, stream: false, temperature: data.temperature ?? 0.7 }),
+        signal: AbortSignal.timeout(120000),
+      });
+      if (!res.ok) throw new Error(`LM Studio ${res.status}`);
+      const json = await res.json();
+      result = json.choices?.[0]?.message?.content || '';
+    } else {
+      const map: Record<string, { baseUrl: string; keyName: string }> = {
+        openai:   { baseUrl: 'https://api.openai.com/v1', keyName: 'openai' },
+        google:   { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', keyName: 'google' },
+        qwen:     { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', keyName: 'qwen' },
+        zhipu:    { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', keyName: 'zhipu' },
+        deepseek: { baseUrl: 'https://api.deepseek.com/v1', keyName: 'deepseek' },
+      };
+      const cfg = map[provider];
+      if (!cfg) throw new Error(`LLM 节点: 不支持的厂商 ${provider}`);
+      const key = state.apiKeys[cfg.keyName];
+      if (!key) throw new Error(`LLM 节点: 未配置 ${provider} API Key`);
+      const llm = new LLMService(key, cfg.baseUrl);
+      result = await llm.chatCompletion({
+        model,
+        messages,
+        stream: false,
+        temperature: data.temperature,
+        max_tokens: data.maxTokens,
+      });
+    }
+
     return {
-      result: `[LLM Response for: ${prompt.substring(0, 50)}...]`,
-      model: data.model,
-      tokens: Math.ceil(prompt.length / 4),
+      result,
+      model,
+      provider,
+      tokens: Math.ceil((userPrompt.length + result.length) / 4),
+      userPrompt,
     };
   }
 
@@ -330,47 +383,106 @@ class WorkflowService {
   }
 
   /**
-   * Execute RAG node
+   * Execute RAG node - REAL retrieval from user's knowledge bases
    */
   private async executeRAGNode(data: RAGNodeData, context: Record<string, any>): Promise<any> {
-    // Resolve query
     const query = this.resolveTemplate(data.queryTemplate, context);
-    
-    // Simulate RAG search
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    return {
-      results: [
-        { content: `Relevant content for: ${query}`, similarity: 0.95 },
-        { content: `Additional context for: ${query}`, similarity: 0.87 },
-      ],
-      query,
-      count: 2,
-    };
+    const state = useStore.getState();
+    const kbState = useKnowledgeBaseStore.getState();
+
+    // Resolve target KBs: prefer data.knowledgeBaseIds, fallback to all selected
+    let targetKBs = data.knowledgeBaseIds || [];
+    if (targetKBs.length === 0) {
+      targetKBs = kbState.selectedKnowledgeBaseIds;
+    }
+    if (targetKBs.length === 0) {
+      return { results: [], query, count: 0, message: '未选择任何知识库' };
+    }
+
+    // Collect chunks from target KBs
+    const chunks: Array<{ id: string; content: string; metadata: any; embedding?: number[] }> = [];
+    for (const kbId of targetKBs) {
+      const kb = kbState.knowledgeBases.find(k => k.id === kbId);
+      if (!kb) continue;
+      for (const c of kb.chunks) {
+        chunks.push({
+          id: c.id,
+          content: c.content,
+          metadata: { documentId: c.metadata?.documentId, documentName: c.metadata?.documentName, knowledgeBaseId: kbId },
+        });
+      }
+    }
+    if (chunks.length === 0) {
+      return { results: [], query, count: 0, message: '所选知识库中没有任何文档' };
+    }
+
+    try {
+      const ragService = new RAGService(state.embeddingConfig);
+      const result = await ragService.searchRelevantChunks(query, chunks as any, data.topK || 5);
+      return {
+        results: result.results.map(r => ({
+          content: r.chunk.content,
+          documentName: (r.chunk.metadata as any)?.documentName,
+          similarity: r.score,
+        })),
+        query,
+        count: result.results.length,
+        stats: result.stats,
+      };
+    } catch (e) {
+      return {
+        results: [],
+        query,
+        count: 0,
+        error: e instanceof Error ? e.message : String(e),
+        message: 'RAG 检索失败(已优雅降级)',
+      };
+    }
   }
 
   /**
-   * Execute transformer node
+   * Execute transformer node - real map/filter/reduce over arrays
    */
   private executeTransformerNode(data: TransformerNodeData, context: Record<string, any>): any {
-    const inputData = context.input || context;
-    
+    // Find the first array in context (typical: rag.results, llm.result etc)
+    let inputData: any = context.input;
+    if (inputData === undefined) {
+      // Try to find array in context
+      for (const v of Object.values(context)) {
+        if (Array.isArray(v)) { inputData = v; break; }
+        if (v && typeof v === 'object' && Array.isArray(v.results)) { inputData = v.results; break; }
+      }
+    }
+    if (inputData === undefined) inputData = context;
+
     try {
       switch (data.transformType) {
-        case 'map':
-          // Simple map transformation
-          return inputData;
-        case 'filter':
-          return inputData;
-        case 'reduce':
-          return inputData;
-        default:
-          // Custom expression
-          const func = new Function('input', `return ${data.expression}`);
+        case 'map': {
+          if (!Array.isArray(inputData)) return { error: 'map 需要数组输入', input: inputData };
+          if (!data.expression.trim()) return inputData;
+          const fn = new Function('item', 'idx', `return (${data.expression})`);
+          return inputData.map((item, idx) => fn(item, idx));
+        }
+        case 'filter': {
+          if (!Array.isArray(inputData)) return { error: 'filter 需要数组输入', input: inputData };
+          if (!data.expression.trim()) return inputData;
+          const fn = new Function('item', 'idx', `return (${data.expression})`);
+          return inputData.filter((item, idx) => fn(item, idx));
+        }
+        case 'reduce': {
+          if (!Array.isArray(inputData)) return { error: 'reduce 需要数组输入', input: inputData };
+          if (!data.expression.trim()) return inputData;
+          const fn = new Function('acc', 'item', 'idx', `return (${data.expression})`);
+          return inputData.reduce((acc, item, idx) => fn(acc, item, idx), {});
+        }
+        default: {
+          // Custom expression over input
+          const func = new Function('input', `return (${data.expression})`);
           return func(inputData);
+        }
       }
     } catch (error) {
-      return { error: String(error) };
+      return { error: String(error), input: Array.isArray(inputData) ? `${inputData.length} items` : typeof inputData };
     }
   }
 

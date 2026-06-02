@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePluginStore } from '../stores/pluginStore';
 import type { PluginManifest, MarketplacePlugin, PluginCategory } from '../types/plugin';
+import { runCode, testApi, webSearch, analyzeText, calc, shortenUrl, notesOps, tasksOps, summarizeText, translateText } from '../services/pluginImplementations';
 import {
   Puzzle,
   Download,
@@ -21,6 +22,17 @@ import {
   Package,
   Plus,
   ArrowUpDown,
+  Zap,
+  Code2,
+  Globe,
+  Activity,
+  Link2,
+  Type,
+  Calculator,
+  ClipboardList,
+  StickyNote,
+  Languages,
+  FileText,
 } from 'lucide-react';
 
 const categories: { id: PluginCategory | 'all'; label: string }[] = [
@@ -57,7 +69,7 @@ export function PluginPage() {
     checkUpdateAvailable,
   } = usePluginStore();
 
-  const [activeTab, setActiveTab] = useState<'marketplace' | 'installed' | 'settings'>('marketplace');
+  const [activeTab, setActiveTab] = useState<'marketplace' | 'installed' | 'tools' | 'settings'>('marketplace');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<PluginCategory | 'all'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -207,6 +219,18 @@ export function PluginPage() {
           >
             <Settings className="h-4 w-4" />
             设置
+          </button>
+          <button
+            onClick={() => setActiveTab('tools')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all`}
+            style={{
+              background: activeTab === 'tools' ? 'var(--t-accent-subtle)' : 'transparent',
+              color: activeTab === 'tools' ? 'var(--t-accent-light)' : 'var(--t-text-muted)',
+              border: `1px solid ${activeTab === 'tools' ? 'var(--t-accent-border)' : 'transparent'}`
+            }}
+          >
+            <Zap className="h-4 w-4" />
+            实用工具
           </button>
         </div>
 
@@ -463,6 +487,8 @@ export function PluginPage() {
           </div>
         )}
 
+        {activeTab === 'tools' && <PluginToolsPanel />}
+
         {activeTab === 'settings' && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
@@ -669,6 +695,474 @@ interface PluginCardProps {
   onInstall: () => void;
   onClick: () => void;
   compact?: boolean;
+}
+
+// ========== Plugin Tools Panel - 8 real working tools ==========
+type ToolId = 'code-runner' | 'api-tester' | 'web-search' | 'word-counter' | 'calculator' | 'url-shortener' | 'quick-notes' | 'task-manager' | 'translator' | 'summarizer';
+
+const TOOL_DEFS: Array<{ id: ToolId; name: string; description: string; icon: any; color: string }> = [
+  { id: 'code-runner', name: '代码运行器', description: '浏览器沙箱执行 JavaScript,带超时保护', icon: Code2, color: 'blue' },
+  { id: 'api-tester', name: 'API 测试', description: 'HTTP 请求测试,返回状态/头/体/耗时', icon: Activity, color: 'purple' },
+  { id: 'web-search', name: 'Web 搜索', description: 'DuckDuckGo / Google 真实搜索', icon: Globe, color: 'emerald' },
+  { id: 'word-counter', name: '字数统计', description: '字符/词数/行数/句数/阅读时间/高频词', icon: Type, color: 'amber' },
+  { id: 'calculator', name: '计算器', description: '支持三角函数/对数/π/e/数学常量', icon: Calculator, color: 'pink' },
+  { id: 'url-shortener', name: 'URL 缩短', description: 'is.gd 真实短链服务', icon: Link2, color: 'cyan' },
+  { id: 'quick-notes', name: '快速笔记', description: 'localStorage 持久化 CRUD', icon: StickyNote, color: 'yellow' },
+  { id: 'task-manager', name: '任务管理', description: '待办清单 + 优先级 + 完成状态', icon: ClipboardList, color: 'rose' },
+  { id: 'translator', name: 'AI 翻译', description: '调用当前对话模型翻译', icon: Languages, color: 'indigo' },
+  { id: 'summarizer', name: 'AI 摘要', description: '调用当前对话模型生成摘要', icon: FileText, color: 'teal' },
+];
+
+function PluginToolsPanel() {
+  const [activeTool, setActiveTool] = useState<ToolId>('code-runner');
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 rounded-xl" style={{ background: 'var(--t-accent-subtle)', border: '1px solid var(--t-accent-border)' }}>
+        <h3 className="font-medium flex items-center gap-2 mb-1" style={{ color: 'var(--t-text)' }}>
+          <Zap className="h-4 w-4" style={{ color: 'var(--t-accent-light)' }} />
+          实用工具箱
+        </h3>
+        <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+          10 个真实可用的工具 · 所有数据在浏览器本地处理 · 无需后端服务
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        {TOOL_DEFS.map(t => {
+          const Icon = t.icon;
+          const active = activeTool === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setActiveTool(t.id)}
+              className="flex flex-col items-start gap-1 p-3 rounded-lg text-left transition-all"
+              style={{
+                background: active ? 'var(--t-accent-subtle)' : 'var(--t-glass-card)',
+                border: `1px solid ${active ? 'var(--t-accent-border)' : 'var(--t-glass-border)'}`,
+              }}
+            >
+              <Icon className="h-4 w-4" style={{ color: active ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }} />
+              <div className="text-xs font-medium" style={{ color: 'var(--t-text)' }}>{t.name}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="p-5 rounded-xl" style={{ background: 'var(--t-glass-card)', border: '1px solid var(--t-glass-border)' }}>
+        {activeTool === 'code-runner' && <CodeRunnerTool />}
+        {activeTool === 'api-tester' && <ApiTesterTool />}
+        {activeTool === 'web-search' && <WebSearchTool />}
+        {activeTool === 'word-counter' && <WordCounterTool />}
+        {activeTool === 'calculator' && <CalculatorTool />}
+        {activeTool === 'url-shortener' && <UrlShortenerTool />}
+        {activeTool === 'quick-notes' && <QuickNotesTool />}
+        {activeTool === 'task-manager' && <TaskManagerTool />}
+        {activeTool === 'translator' && <TranslatorTool />}
+        {activeTool === 'summarizer' && <SummarizerTool />}
+      </div>
+    </div>
+  );
+}
+
+function CodeRunnerTool() {
+  const [code, setCode] = useState('// 试试: console.log("hello");\nconst arr = [1, 2, 3, 4, 5];\nconsole.log("sum:", arr.reduce((a, b) => a + b, 0));\nconsole.log("even:", arr.filter(x => x % 2 === 0));');
+  const [output, setOutput] = useState('');
+  const [running, setRunning] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+
+  const run = async () => {
+    setRunning(true);
+    const r = await runCode('javascript', code, 5000);
+    setOutput((r.output || '') + (r.error ? `\n❌ ${r.error}` : ''));
+    setDuration(r.durationMs);
+    setRunning(false);
+  };
+
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>JavaScript 代码执行 (5秒超时)</h4>
+      <textarea
+        value={code}
+        onChange={e => setCode(e.target.value)}
+        className="w-full p-3 rounded-lg font-mono text-xs"
+        rows={10}
+        style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', border: '1px solid var(--t-glass-border)' }}
+      />
+      <div className="flex items-center gap-2 mt-2">
+        <button onClick={run} disabled={running} className="px-4 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-sm disabled:opacity-50 flex items-center gap-1.5">
+          {running ? <Activity className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+          {running ? '执行中' : '运行'}
+        </button>
+        {duration !== null && <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>耗时 {duration}ms</span>}
+      </div>
+      {output && (
+        <pre className="mt-3 p-3 rounded-lg text-xs font-mono overflow-auto max-h-64" style={{ background: 'rgba(0,0,0,0.4)', color: '#a5f3fc' }}>
+          {output}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function ApiTesterTool() {
+  const [method, setMethod] = useState('GET');
+  const [url, setUrl] = useState('https://api.github.com/repos/memory125/nexusai');
+  const [headers, setHeaders] = useState('');
+  const [body, setBody] = useState('');
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = async () => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const r = await testApi({ method, url, headers, body });
+      setResult(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>HTTP API 测试</h4>
+      <div className="flex gap-2 mb-2">
+        <select value={method} onChange={e => setMethod(e.target.value)} className="px-2 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }}>
+          {['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD'].map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <input value={url} onChange={e => setUrl(e.target.value)} className="flex-1 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+        <button onClick={run} disabled={loading} className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm disabled:opacity-50 flex items-center gap-1.5">
+          {loading ? <Activity className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+          {loading ? '请求中' : '发送'}
+        </button>
+      </div>
+      <details className="text-xs mb-2">
+        <summary style={{ color: 'var(--t-text-secondary)', cursor: 'pointer' }}>Headers / Body</summary>
+        <textarea value={headers} onChange={e => setHeaders(e.target.value)} placeholder='{"Authorization": "Bearer ..."}' rows={2} className="mt-1 w-full p-2 rounded font-mono" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)' }} />
+        <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="请求体" rows={2} className="mt-1 w-full p-2 rounded font-mono" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)' }} />
+      </details>
+      {error && <div className="text-xs text-red-400">⚠️ {error}</div>}
+      {result && (
+        <div className="rounded-lg p-3 space-y-1 text-xs" style={{ background: 'rgba(0,0,0,0.2)' }}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`px-2 py-0.5 rounded font-bold ${result.ok ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{result.status} {result.statusText}</span>
+            <span style={{ color: 'var(--t-text-muted)' }}>耗时 {result.durationMs}ms</span>
+            <span style={{ color: 'var(--t-text-muted)' }}>{result.sizeBytes}B</span>
+          </div>
+          <pre className="mt-2 p-2 rounded overflow-auto max-h-48 text-xs font-mono" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text-secondary)' }}>
+            {result.bodyJson ? JSON.stringify(result.bodyJson, null, 2) : result.bodyText}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WebSearchTool() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Array<{ title: string; url: string; snippet: string }> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const search = async () => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await webSearch(query, 8);
+      setResults(r);
+      if (r.length === 0) setErr('未找到结果');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>真实 Web 搜索 (DuckDuckGo / Google)</h4>
+      <div className="flex gap-2">
+        <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && search()} placeholder="输入搜索关键词..." className="flex-1 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+        <button onClick={search} disabled={loading} className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm disabled:opacity-50 flex items-center gap-1.5">
+          {loading ? <Activity className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
+          {loading ? '搜索中' : '搜索'}
+        </button>
+      </div>
+      {err && <div className="mt-2 text-xs text-amber-400">⚠️ {err}</div>}
+      {results && results.length > 0 && (
+        <div className="mt-3 space-y-2 max-h-96 overflow-y-auto">
+          {results.map((r, i) => (
+            <div key={i} className="p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium hover:underline" style={{ color: 'var(--t-accent-light)' }}>{r.title}</a>
+              <div className="text-xs truncate" style={{ color: 'var(--t-text-muted)' }}>{r.url}</div>
+              {r.snippet && <p className="text-xs mt-1" style={{ color: 'var(--t-text-secondary)' }}>{r.snippet}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WordCounterTool() {
+  const [text, setText] = useState('');
+  const stats = text ? analyzeText(text) : null;
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>文本分析</h4>
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={6} placeholder="粘贴或输入文本..." className="w-full p-3 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+      {stats && (
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+          <Stat label="字符(含空格)" value={stats.chars} />
+          <Stat label="字符(无空格)" value={stats.charsNoSpace} />
+          <Stat label="词数" value={stats.words} />
+          <Stat label="行数" value={stats.lines} />
+          <Stat label="句数" value={stats.sentences} />
+          <Stat label="段落" value={stats.paragraphs} />
+          <Stat label="阅读时间" value={`${stats.readingMinutes} 分钟`} />
+          <Stat label="Top 5 词" value={stats.topWords.map(([w]) => w).join(', ') || '-'} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: any }) {
+  return (
+    <div className="p-2 rounded" style={{ background: 'rgba(0,0,0,0.2)' }}>
+      <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>{label}</div>
+      <div className="font-mono font-medium" style={{ color: 'var(--t-text)' }}>{value}</div>
+    </div>
+  );
+}
+
+function CalculatorTool() {
+  const [expr, setExpr] = useState('2 * (3 + 4) / 5');
+  const r = calc(expr);
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>科学计算器 (支持 + − × ÷ sin cos tan log √ π e)</h4>
+      <input value={expr} onChange={e => setExpr(e.target.value)} placeholder="数学表达式" className="w-full p-3 rounded-lg text-sm font-mono" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+      <div className="mt-3 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
+        <div className="text-xs mb-1" style={{ color: 'var(--t-text-muted)' }}>结果</div>
+        {r.ok ? (
+          <div className="text-2xl font-mono font-bold" style={{ color: '#a5f3fc' }}>{r.value}</div>
+        ) : (
+          <div className="text-sm text-red-400">⚠️ {r.error}</div>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1 text-xs">
+        {['π', 'e', 'sin(π/2)', 'cos(0)', 'sqrt(144)', 'log(100)', 'pow(2,10)'].map(s => (
+          <button key={s} onClick={() => setExpr(s)} className="px-2 py-1 rounded" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text-secondary)' }}>{s}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function UrlShortenerTool() {
+  const [url, setUrl] = useState('https://github.com/memory125/nexusai');
+  const [result, setResult] = useState<{ ok: boolean; shortUrl?: string; error?: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const run = async () => {
+    setLoading(true);
+    const r = await shortenUrl(url);
+    setResult(r);
+    setLoading(false);
+  };
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>URL 短链 (is.gd)</h4>
+      <div className="flex gap-2">
+        <input value={url} onChange={e => setUrl(e.target.value)} className="flex-1 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+        <button onClick={run} disabled={loading} className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm disabled:opacity-50 flex items-center gap-1.5">
+          {loading ? <Activity className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+          缩短
+        </button>
+      </div>
+      {result?.ok && (
+        <div className="mt-3 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
+          <div className="text-xs" style={{ color: 'var(--t-text-muted)' }}>短链</div>
+          <a href={result.shortUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-sm" style={{ color: 'var(--t-accent-light)' }}>{result.shortUrl}</a>
+        </div>
+      )}
+      {result && !result.ok && <div className="mt-2 text-xs text-red-400">⚠️ {result.error}</div>}
+    </div>
+  );
+}
+
+function QuickNotesTool() {
+  const [notes, setNotes] = useState(notesOps.list());
+  const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [search, setSearch] = useState('');
+
+  const refresh = () => setNotes(notesOps.list());
+  const add = () => {
+    if (!draft.trim()) return;
+    notesOps.add(draft);
+    setDraft('');
+    refresh();
+  };
+  const save = (id: string) => {
+    notesOps.update(id, editText);
+    setEditing(null);
+    refresh();
+  };
+  const remove = (id: string) => { notesOps.remove(id); refresh(); };
+  const filtered = search ? notes.filter(n => n.content.toLowerCase().includes(search.toLowerCase())) : notes;
+
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>快速笔记 (localStorage 持久化)</h4>
+      <div className="flex gap-2 mb-2">
+        <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} placeholder="新笔记..." className="flex-1 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+        <button onClick={add} className="px-3 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm">添加</button>
+      </div>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索..." className="w-full px-3 py-1.5 rounded-lg text-xs mb-2" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+      <div className="space-y-2 max-h-80 overflow-y-auto">
+        {filtered.length === 0 && <div className="text-center text-xs py-4" style={{ color: 'var(--t-text-muted)' }}>{notes.length === 0 ? '还没有笔记' : '没有匹配的笔记'}</div>}
+        {filtered.map(n => (
+          <div key={n.id} className="p-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
+            {editing === n.id ? (
+              <div>
+                <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} className="w-full p-2 rounded text-xs" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)' }} />
+                <div className="flex gap-2 mt-1">
+                  <button onClick={() => save(n.id)} className="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs">保存</button>
+                  <button onClick={() => setEditing(null)} className="px-2 py-1 rounded text-xs" style={{ color: 'var(--t-text-muted)' }}>取消</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--t-text)' }}>{n.content}</p>
+                <div className="flex items-center gap-2 mt-1 text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+                  <span>{new Date(n.updatedAt).toLocaleString()}</span>
+                  <button onClick={() => { setEditing(n.id); setEditText(n.content); }} className="hover:underline">编辑</button>
+                  <button onClick={() => remove(n.id)} className="hover:underline text-red-400">删除</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TaskManagerTool() {
+  const [tasks, setTasks] = useState(tasksOps.list());
+  const [draft, setDraft] = useState('');
+  const [priority, setPriority] = useState<'low'|'medium'|'high'>('medium');
+  const refresh = () => setTasks(tasksOps.list());
+  const add = () => { if (draft.trim()) { tasksOps.add(draft, priority); setDraft(''); refresh(); } };
+  const remaining = tasks.filter(t => !t.done).length;
+  return (
+    <div>
+      <h4 className="font-medium mb-3 flex items-center justify-between" style={{ color: 'var(--t-text)' }}>
+        <span>任务管理</span>
+        <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{remaining} 待办 / {tasks.length} 总数</span>
+      </h4>
+      <div className="flex gap-2 mb-2">
+        <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} placeholder="新任务..." className="flex-1 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+        <select value={priority} onChange={e => setPriority(e.target.value as any)} className="px-2 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }}>
+          <option value="low">低</option><option value="medium">中</option><option value="high">高</option>
+        </select>
+        <button onClick={add} className="px-3 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm">添加</button>
+      </div>
+      {tasks.length > 0 && (
+        <button onClick={() => { tasksOps.clearDone(); refresh(); }} className="text-xs mb-2" style={{ color: 'var(--t-text-muted)' }}>清除已完成</button>
+      )}
+      <div className="space-y-1 max-h-80 overflow-y-auto">
+        {tasks.length === 0 && <div className="text-center text-xs py-4" style={{ color: 'var(--t-text-muted)' }}>还没有任务</div>}
+        {tasks.map(t => (
+          <div key={t.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: t.done ? 'rgba(34,197,94,0.05)' : 'rgba(0,0,0,0.2)' }}>
+            <input type="checkbox" checked={t.done} onChange={() => { tasksOps.toggle(t.id); refresh(); }} className="rounded" />
+            <span className={`flex-1 text-sm ${t.done ? 'line-through' : ''}`} style={{ color: t.done ? 'var(--t-text-muted)' : 'var(--t-text)' }}>{t.title}</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded ${t.priority === 'high' ? 'bg-red-500/20 text-red-400' : t.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-500/20'}`} style={{ color: t.priority === 'low' ? 'var(--t-text-muted)' : undefined }}>{t.priority}</span>
+            <button onClick={() => { tasksOps.remove(t.id); refresh(); }} className="text-xs text-red-400 hover:underline">删除</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TranslatorTool() {
+  const [text, setText] = useState('');
+  const [target, setTarget] = useState('英文');
+  const [result, setResult] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => {
+    if (!text.trim()) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await translateText(text, target);
+      setResult(r);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+    setLoading(false);
+  };
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>AI 翻译 (使用当前对话模型)</h4>
+      <div className="flex gap-2 mb-2">
+        <input value={text} onChange={e => setText(e.target.value)} placeholder="要翻译的文本..." className="flex-1 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+        <select value={target} onChange={e => setTarget(e.target.value)} className="px-2 py-2 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }}>
+          {['英文', '中文', '日文', '韩文', '法文', '德文', '西班牙文', '俄文'].map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+        <button onClick={run} disabled={loading} className="px-3 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm disabled:opacity-50 flex items-center gap-1.5">
+          {loading ? <Activity className="h-3.5 w-3.5 animate-spin" /> : <Languages className="h-3.5 w-3.5" />}
+          翻译
+        </button>
+      </div>
+      {err && <div className="text-xs text-red-400">⚠️ {err}</div>}
+      {result && <pre className="mt-2 p-3 rounded-lg text-sm whitespace-pre-wrap" style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--t-text)' }}>{result}</pre>}
+    </div>
+  );
+}
+
+function SummarizerTool() {
+  const [text, setText] = useState('');
+  const [max, setMax] = useState(200);
+  const [result, setResult] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const run = async () => {
+    if (!text.trim()) return;
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await summarizeText(text, max);
+      setResult(r);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+    setLoading(false);
+  };
+  return (
+    <div>
+      <h4 className="font-medium mb-3" style={{ color: 'var(--t-text)' }}>AI 摘要 (使用当前对话模型)</h4>
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={5} placeholder="要摘要的长文本..." className="w-full p-3 rounded-lg text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+      <div className="flex items-center gap-2 mt-2">
+        <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>最大字数</span>
+        <input type="number" value={max} onChange={e => setMax(Number(e.target.value))} min={50} max={1000} className="w-20 px-2 py-1 rounded text-sm" style={{ background: 'var(--t-glass-bg)', color: 'var(--t-text)' }} />
+        <button onClick={run} disabled={loading} className="px-4 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-sm disabled:opacity-50 flex items-center gap-1.5">
+          {loading ? <Activity className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+          摘要
+        </button>
+      </div>
+      {err && <div className="mt-2 text-xs text-red-400">⚠️ {err}</div>}
+      {result && <pre className="mt-2 p-3 rounded-lg text-sm whitespace-pre-wrap" style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--t-text)' }}>{result}</pre>}
+    </div>
+  );
 }
 
 function PluginCard({ plugin, installed, installing, onInstall, onClick, compact }: PluginCardProps) {

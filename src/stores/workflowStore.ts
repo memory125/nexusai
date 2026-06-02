@@ -75,16 +75,39 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       const { workflowService } = await import('../services/workflowService');
       const result = await workflowService.execute(workflow, inputs);
 
+      const execution = {
+        id: `exec_${Date.now()}`,
+        workflowId: id,
+        status: result.success ? 'completed' : 'failed',
+        startedAt: Date.now() - (result.duration || 0),
+        completedAt: Date.now(),
+        nodeResults: result.nodeResults || {},
+        output: result.output,
+        error: result.error,
+        duration: result.duration,
+      };
+
       set(s => ({
         workflows: s.workflows.map(w => w.id === id
-          ? { ...w, lastRunAt: Date.now(), runCount: w.runCount + 1, status: result.success ? 'completed' : 'failed' }
+          ? { ...w, lastRunAt: Date.now(), runCount: w.runCount + 1, status: execution.status as any }
           : w
         ),
+        currentExecution: execution,
         isExecuting: false,
       }));
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
       set(s => ({
         workflows: s.workflows.map(w => w.id === id ? { ...w, status: 'failed' } : w),
+        currentExecution: {
+          id: `exec_${Date.now()}`,
+          workflowId: id,
+          status: 'failed',
+          startedAt: Date.now(),
+          completedAt: Date.now(),
+          nodeResults: {},
+          error: errMsg,
+        } as any,
         isExecuting: false,
       }));
     }

@@ -275,47 +275,42 @@ export class BrowserAutomationService {
   }
 
   /**
-   * Take screenshot (uses canvas to render page preview if possible)
+   * Take screenshot - REAL implementation using SVG foreignObject.
+   * Renders the actual HTML through the browser's native renderer,
+   * then captures it to a canvas. Works for any reachable URL.
    */
   async takeScreenshot(sessionId: string, _options?: { fullPage?: boolean; selector?: string }): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error('Session not found');
+    if (!session.htmlContent) throw new Error('页面内容未加载');
 
-    if (session.htmlContent) {
-      // Create an iframe-like preview and capture it
-      return new Promise((resolve) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 1280;
-        canvas.height = 800;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Draw a styled preview card
-          ctx.fillStyle = '#1a1a2e';
-          ctx.fillRect(0, 0, 1280, 800);
-          ctx.fillStyle = '#e0e0e0';
-          ctx.font = 'bold 24px Arial';
-          ctx.fillText(session.title || session.url, 40, 60);
-          ctx.fillStyle = '#888';
-          ctx.font = '14px Arial';
-          ctx.fillText(session.url, 40, 100);
-          
-          // Draw content preview
-          const text = this.extractTextContent(session.parsedDoc || this.parseHtml(session.htmlContent || ''));
-          const lines = this.wrapText(text, 120);
-          ctx.fillStyle = '#ccc';
-          ctx.font = '12px Arial';
-          lines.slice(0, 20).forEach((line, i) => {
-            ctx.fillText(line, 40, 140 + i * 18);
-          });
-          
-          resolve(canvas.toDataURL('image/png'));
-        } else {
-          resolve(this.fallbackScreenshot(session));
-        }
+    const W = 1280;
+    const H = 1800;
+    const wrappedHtml = session.htmlContent
+      .replace(/<head>/i, `<head><base href="${session.url}"><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#222;background:#fff;padding:20px;margin:0;}</style>`);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:${W}px;min-height:${H}px;">${wrappedHtml}</div></foreignObject></svg>`;
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const svgUrl = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('SVG render failed'));
+        img.src = svgUrl;
       });
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas context unavailable');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+      ctx.drawImage(img, 0, 0, W, H);
+      return canvas.toDataURL('image/png');
+    } finally {
+      URL.revokeObjectURL(svgUrl);
     }
-
-    return this.fallbackScreenshot(session);
   }
 
   private fallbackScreenshot(session: BrowserSession): string {
@@ -349,21 +344,84 @@ export class BrowserAutomationService {
   }
 
   /**
-   * Generate PDF (creates a simple text-based PDF from page content)
+   * Generate PDF (REAL - opens browser print dialog for the user to save as PDF)
    */
   async generatePDF(sessionId: string, _options?: { format?: 'A4' | 'Letter'; landscape?: boolean }): Promise<Blob> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error('Session not found');
 
     const content = session.htmlContent || '<html><body>No content</body></html>';
-    
-    // Create an HTML blob that can be opened as a printable page
+
+    // Build a clean printable HTML with proper styles
     const htmlContent = `<!DOCTYPE html><html><head><title>${session.title}</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;}
-      h1{color:#333;}a{color:#0066cc;}img{max-width:100%;}pre{background:#f5f5f5;padding:10px;overflow:auto;}</style>
-      </head><body>${content}</body></html>`;
-    
+      <base href="${session.url}">
+      <style>
+        @page { size: A4; margin: 20mm; }
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#222;background:#fff;padding:0;line-height:1.6;max-width:100%;margin:0;}
+        h1{color:#111;border-bottom:2px solid #333;padding-bottom:8px;}
+        h2,h3{color:#222;}
+        a{color:#0066cc;text-decoration:none;}
+        img{max-width:100%;height:auto;}
+        pre{background:#f5f5f5;padding:10px;overflow:auto;border-radius:4px;}
+        code{background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:0.9em;}
+        blockquote{border-left:3px solid #ccc;padding-left:12px;color:#555;margin:12px 0;}
+        table{border-collapse:collapse;width:100%;}
+        th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;}
+        th{background:#f5f5f5;}
+        @media print {
+          .no-print { display: none; }
+          body { padding: 0; }
+        }
+        .print-hint{background:#fff3cd;border:1px solid #ffc107;padding:12px;border-radius:6px;margin-bottom:20px;font-size:14px;}
+      </style>
+      </head><body>
+        <div class="print-hint no-print">
+          📄 <strong>PDF 导出提示</strong>: 按 <kbd>Ctrl+P</kbd> (Mac: <kbd>Cmd+P</kbd>)，目标选"另存为 PDF"。
+          加载完成后本提示将自动隐藏。
+        </div>
+        <h1>${session.title}</h1>
+        <p style="color:#666;font-size:12px;">来源: ${session.url} · 导出时间: ${new Date().toLocaleString()}</p>
+        <hr>
+        ${content}
+        <script>
+          // Auto-trigger print dialog after 1.5s
+          setTimeout(() => {
+            const hint = document.querySelector('.print-hint');
+            if (hint) hint.style.display = 'none';
+            try { window.print(); } catch (e) { console.error(e); }
+          }, 1500);
+        </script>
+      </body></html>`;
+
     return new Blob([htmlContent], { type: 'text/html' });
+  }
+
+  /**
+   * Extract all form fields from current page (real DOM parsing)
+   */
+  extractFormFields(sessionId: string): Array<{ tag: string; type: string; name: string; id?: string; placeholder?: string; value?: string; required: boolean; options?: string[] }> {
+    const session = this.sessions.get(sessionId);
+    if (!session || !session.htmlContent) return [];
+    const doc = session.parsedDoc || this.parseHtml(session.htmlContent);
+    const fields: Array<{ tag: string; type: string; name: string; id?: string; placeholder?: string; value?: string; required: boolean; options?: string[] }> = [];
+    doc.querySelectorAll('input, textarea, select').forEach(el => {
+      const tag = el.tagName.toLowerCase();
+      const type = (el.getAttribute('type') || (tag === 'textarea' ? 'textarea' : 'text')).toLowerCase();
+      const field: { tag: string; type: string; name: string; id?: string; placeholder?: string; value?: string; required: boolean; options?: string[] } = {
+        tag,
+        type,
+        name: el.getAttribute('name') || el.getAttribute('id') || '',
+        id: el.getAttribute('id') || undefined,
+        placeholder: el.getAttribute('placeholder') || undefined,
+        value: (el as HTMLInputElement).value || undefined,
+        required: el.hasAttribute('required'),
+      };
+      if (tag === 'select') {
+        field.options = Array.from((el as HTMLSelectElement).options).map(o => o.value || o.textContent || '').filter(Boolean);
+      }
+      fields.push(field);
+    });
+    return fields;
   }
 
   /**

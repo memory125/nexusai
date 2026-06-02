@@ -599,6 +599,205 @@ export const WORKFLOW_TEMPLATES: Omit<WorkflowTemplate, 'id' | 'createdAt' | 'up
       { id: 'e2', source: 'generate_doc', target: 'output' },
     ],
   },
+
+  // ========== 真正解决痛点的工作流模板 ==========
+
+  // 1. 客服工单自动回复 (RAG + LLM)
+  {
+    name: '客服工单自动回复',
+    description: '输入客户问题 → 知识库检索 → LLM 生成专业回复 → 输出可发送的回复文本。解决客服重复性问题。',
+    category: 'Customer Service',
+    nodes: [
+      { id: 'ticket', type: 'input', position: { x: 50, y: 200 },
+        data: { fieldName: 'question', fieldType: 'text', required: true } },
+      { id: 'rag', type: 'rag', position: { x: 250, y: 200 },
+        data: { knowledgeBaseIds: [], queryTemplate: '{{inputs.question}}', topK: 5, includeSources: true } },
+      { id: 'draft', type: 'llm', position: { x: 450, y: 200 },
+        data: {
+          model: '', provider: '',
+          systemPrompt: '你是一名专业客服。基于提供的知识库上下文回答用户问题。要求:\n1. 礼貌、专业、简洁\n2. 必须基于上下文,不要编造\n3. 如果上下文无法回答,明确说明并建议转人工\n4. 末尾列出参考的知识库来源',
+          inputs: { context: '{{rag.results}}', question: '{{inputs.question}}' },
+          temperature: 0.3,
+        } },
+      { id: 'output', type: 'output', position: { x: 650, y: 200 },
+        data: { outputFormat: 'text' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'ticket', target: 'rag' },
+      { id: 'e2', source: 'rag', target: 'draft' },
+      { id: 'e3', source: 'draft', target: 'output' },
+    ],
+  },
+
+  // 2. 每日新闻摘要 (Webhook + LLM)
+  {
+    name: '每日新闻摘要',
+    description: '从多个 RSS / 新闻源拉取最新内容 → 合并去重 → LLM 提炼重点 → 输出结构化简报。解决信息过载。',
+    category: 'Content',
+    nodes: [
+      { id: 'feeds', type: 'input', position: { x: 50, y: 200 },
+        data: { fieldName: 'sources', fieldType: 'text', required: true } },
+      { id: 'fetch1', type: 'webhook', position: { x: 250, y: 100 },
+        data: { url: 'https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=20', method: 'GET', timeout: 15000 } },
+      { id: 'fetch2', type: 'webhook', position: { x: 250, y: 300 },
+        data: { url: 'https://www.reddit.com/r/technology/top.json?limit=15', method: 'GET', timeout: 15000 } },
+      { id: 'merge', type: 'transformer', position: { x: 450, y: 200 },
+        data: {
+          transformType: 'custom',
+          expression: '([...(input?.[0]?.hits || []).map(h => h.title), ...(input?.[1]?.data?.children || []).map(c => c.data.title)]).filter(Boolean).slice(0, 30).join("\\n- ")',
+        } },
+      { id: 'summarize', type: 'llm', position: { x: 650, y: 200 },
+        data: {
+          model: '', provider: '',
+          systemPrompt: '你是一名新闻编辑。请从以下今日要闻中提炼最重要的 5 条,每条不超过 50 字,使用 Markdown 列表输出。开头写一句今日概览。',
+          inputs: { headlines: '{{merge}}' },
+          temperature: 0.4,
+        } },
+      { id: 'output', type: 'output', position: { x: 850, y: 200 },
+        data: { outputFormat: 'markdown' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'feeds', target: 'fetch1' },
+      { id: 'e2', source: 'feeds', target: 'fetch2' },
+      { id: 'e3', source: 'fetch1', target: 'merge' },
+      { id: 'e4', source: 'fetch2', target: 'merge' },
+      { id: 'e5', source: 'merge', target: 'summarize' },
+      { id: 'e6', source: 'summarize', target: 'output' },
+    ],
+  },
+
+  // 3. 代码审查流水线 (输入 → LLM 安全分析 → LLM 风格建议 → 输出)
+  {
+    name: '代码审查流水线',
+    description: '输入代码片段 → LLM 安全/性能/Bug 审查 → LLM 改进建议 → Markdown 报告。',
+    category: 'Developer Tools',
+    nodes: [
+      { id: 'code', type: 'input', position: { x: 50, y: 200 },
+        data: { fieldName: 'code', fieldType: 'text', required: true } },
+      { id: 'lang', type: 'input', position: { x: 50, y: 320 },
+        data: { fieldName: 'language', fieldType: 'text', required: false } },
+      { id: 'audit', type: 'llm', position: { x: 280, y: 200 },
+        data: {
+          model: '', provider: '',
+          systemPrompt: '你是一名严格的代码审查员。按以下维度审查代码:\n1. 安全性(SQL 注入/XSS/越权/敏感信息泄露)\n2. 性能(N+1/重复计算/内存泄漏)\n3. 错误处理(空指针/未捕获异常)\n4. 可读性(命名/复杂度/重复)\n\n输出 Markdown 报告:每个问题标注严重度(🔴 严重 / 🟡 中等 / 🟢 建议),给出位置和修复建议。',
+          inputs: { code: '{{inputs.code}}', language: '{{inputs.language}}' },
+          temperature: 0.2,
+        } },
+      { id: 'refactor', type: 'llm', position: { x: 510, y: 200 },
+        data: {
+          model: '', provider: '',
+          systemPrompt: '基于审查报告,提供重构后的代码。保留原有功能,只修复发现的问题。输出格式:先用一句话总结改动,然后用 ``` 代码块 输出完整代码。',
+          inputs: { code: '{{inputs.code}}', audit: '{{audit.result}}' },
+          temperature: 0.2,
+        } },
+      { id: 'output', type: 'output', position: { x: 740, y: 200 },
+        data: { outputFormat: 'markdown' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'code', target: 'audit' },
+      { id: 'e2', source: 'lang', target: 'audit' },
+      { id: 'e3', source: 'audit', target: 'refactor' },
+      { id: 'e4', source: 'refactor', target: 'output' },
+    ],
+  },
+
+  // 4. 学术论文摘要器 (URL 输入 → 抓取 → LLM 摘要 → 输出)
+  {
+    name: '学术论文摘要器',
+    description: '输入论文 URL → 抓取页面 → 提取正文 → LLM 生成结构化摘要(背景/方法/结果/结论/局限)。解决读论文慢的痛点。',
+    category: 'Content',
+    nodes: [
+      { id: 'url', type: 'input', position: { x: 50, y: 200 },
+        data: { fieldName: 'paper_url', fieldType: 'text', required: true } },
+      { id: 'fetch', type: 'webhook', position: { x: 250, y: 200 },
+        data: { url: '{{inputs.paper_url}}', method: 'GET', timeout: 20000 } },
+      { id: 'condense', type: 'llm', position: { x: 450, y: 200 },
+        data: {
+          model: '', provider: '',
+          systemPrompt: '你是科研助理。基于以下论文原文,生成结构化中文摘要:\n\n## 背景与动机\n## 方法\n## 核心结果\n## 结论与意义\n## 局限与未来工作\n\n要求:客观准确、保留关键数据、术语规范、不超过 800 字。',
+          inputs: { paper_text: '{{fetch.text}}' },
+          temperature: 0.3,
+        } },
+      { id: 'output', type: 'output', position: { x: 650, y: 200 },
+        data: { outputFormat: 'markdown' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'url', target: 'fetch' },
+      { id: 'e2', source: 'fetch', target: 'condense' },
+      { id: 'e3', source: 'condense', target: 'output' },
+    ],
+  },
+
+  // 5. GitHub Issue 自动回复 (RAG + LLM)
+  {
+    name: 'GitHub Issue 自动回复',
+    description: '输入 Issue 标题/正文 → 项目知识库检索相关文档 → LLM 起草回复 → 输出。',
+    category: 'Customer Service',
+    nodes: [
+      { id: 'issue', type: 'input', position: { x: 50, y: 200 },
+        data: { fieldName: 'issue_text', fieldType: 'text', required: true } },
+      { id: 'rag', type: 'rag', position: { x: 250, y: 200 },
+        data: { knowledgeBaseIds: [], queryTemplate: '{{inputs.issue_text}}', topK: 5, includeSources: true } },
+      { id: 'classify', type: 'llm', position: { x: 450, y: 200 },
+        data: {
+          model: '', provider: '',
+          systemPrompt: '判断 Issue 类型:Bug / Feature Request / Question / Docs / Other。仅输出一个标签。',
+          inputs: { issue: '{{inputs.issue_text}}' },
+          temperature: 0,
+        } },
+      { id: 'reply', type: 'llm', position: { x: 650, y: 200 },
+        data: {
+          model: '', provider: '',
+          systemPrompt: '你是开源项目维护者。基于知识库上下文起草 Issue 回复。要求:\n1. 感谢用户提交\n2. 简洁说明相关背景或解决方案\n3. 引用相关文档/源码\n4. 询问必要细节(如果是 Bug)\n5. 避免承诺(不说"我们会马上修复")\n\n格式:Markdown,使用引用块引用上下文,200-400 字。',
+          inputs: { context: '{{rag.results}}', issue: '{{inputs.issue_text}}', type: '{{classify.result}}' },
+          temperature: 0.4,
+        } },
+      { id: 'output', type: 'output', position: { x: 850, y: 200 },
+        data: { outputFormat: 'markdown' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'issue', target: 'rag' },
+      { id: 'e2', source: 'issue', target: 'classify' },
+      { id: 'e3', source: 'rag', target: 'reply' },
+      { id: 'e4', source: 'classify', target: 'reply' },
+      { id: 'e5', source: 'reply', target: 'output' },
+    ],
+  },
+
+  // 6. 竞品情报聚合 (3 并行 webhook → LLM 对比)
+  {
+    name: '竞品情报聚合',
+    description: '输入 3 个竞品 URL → 并行抓取 → LLM 对比功能/价格/优劣 → 输出对比表。',
+    category: 'Data Processing',
+    nodes: [
+      { id: 'urls', type: 'input', position: { x: 50, y: 200 },
+        data: { fieldName: 'competitor_urls', fieldType: 'text', required: true } },
+      { id: 'fetch1', type: 'webhook', position: { x: 250, y: 100 },
+        data: { url: '{{inputs.competitor_urls.split(",")[0]}}', method: 'GET', timeout: 15000 } },
+      { id: 'fetch2', type: 'webhook', position: { x: 250, y: 200 },
+        data: { url: '{{inputs.competitor_urls.split(",")[1] || inputs.competitor_urls.split(",")[0]}}', method: 'GET', timeout: 15000 } },
+      { id: 'fetch3', type: 'webhook', position: { x: 250, y: 300 },
+        data: { url: '{{inputs.competitor_urls.split(",")[2] || inputs.competitor_urls.split(",")[0]}}', method: 'GET', timeout: 15000 } },
+      { id: 'compare', type: 'llm', position: { x: 500, y: 200 },
+        data: {
+          model: '', provider: '',
+          systemPrompt: '你是市场分析师。基于 3 个竞品的网页内容,生成对比表格,字段:产品名/核心功能/价格/目标用户/差异化优势/劣势。Markdown 表格输出,表格前加 1 句总结。',
+          inputs: { c1: '{{fetch1.text}}', c2: '{{fetch2.text}}', c3: '{{fetch3.text}}' },
+          temperature: 0.3,
+        } },
+      { id: 'output', type: 'output', position: { x: 750, y: 200 },
+        data: { outputFormat: 'markdown' } },
+    ],
+    edges: [
+      { id: 'e1', source: 'urls', target: 'fetch1' },
+      { id: 'e2', source: 'urls', target: 'fetch2' },
+      { id: 'e3', source: 'urls', target: 'fetch3' },
+      { id: 'e4', source: 'fetch1', target: 'compare' },
+      { id: 'e5', source: 'fetch2', target: 'compare' },
+      { id: 'e6', source: 'fetch3', target: 'compare' },
+      { id: 'e7', source: 'compare', target: 'output' },
+    ],
+  },
 ];
 
 // Workflow categories
