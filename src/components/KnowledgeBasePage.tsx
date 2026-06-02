@@ -140,28 +140,38 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
             </div>
           )}
 
-          {/* Base URL Input (OpenAI / Ollama) */}
-          {(selectedModelInfo?.provider === 'openai' || selectedModelInfo?.provider === 'ollama') && (
+          {/* Base URL Input (OpenAI / Ollama / LM Studio) */}
+          {(selectedModelInfo?.provider === 'openai' || selectedModelInfo?.provider === 'ollama' || selectedModelInfo?.provider === 'lmstudio') && (
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--t-text-secondary)' }}>
                 <Globe className="h-3 w-3 inline mr-1" />
-                {selectedModelInfo?.provider === 'ollama' ? 'Ollama 服务地址' : '自定义 Base URL (可选)'}
+                {selectedModelInfo?.provider === 'ollama'
+                  ? 'Ollama 服务地址'
+                  : selectedModelInfo?.provider === 'lmstudio'
+                    ? 'LM Studio 服务地址'
+                    : '自定义 Base URL (可选)'}
               </label>
               <input
                 type="text"
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
                 className="glass-input w-full rounded-lg py-2 px-3 text-sm"
-                placeholder={selectedModelInfo?.provider === 'ollama' ? 'http://localhost:11434 (Ollama) / http://localhost:1234 (LM Studio)' : 'https://api.openai.com/v1'}
+                placeholder={
+                  selectedModelInfo?.provider === 'ollama'
+                    ? 'http://localhost:11434'
+                    : selectedModelInfo?.provider === 'lmstudio'
+                      ? 'http://localhost:2233'
+                      : 'https://api.openai.com/v1'
+                }
               />
             </div>
           )}
 
-          {/* Ollama Model Name */}
-          {selectedModelInfo?.provider === 'ollama' && (
+          {/* Ollama / LM Studio Model Name */}
+          {(selectedModelInfo?.provider === 'ollama' || selectedModelInfo?.provider === 'lmstudio') && (
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--t-text-secondary)' }}>
-                Ollama 模型名称
+                {selectedModelInfo?.provider === 'ollama' ? 'Ollama 模型名称' : 'LM Studio 模型名称'}
               </label>
               <input
                 type="text"
@@ -172,8 +182,11 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
               />
               <p className="text-xs mt-1" style={{ color: 'var(--t-text-muted)' }}>
                 留空使用默认 <code>{selectedModelInfo?.defaultModelName}</code>。<br />
-                <strong>Ollama</strong>: 首次使用前需运行 <code className="text-cyan-400">ollama pull {selectedModelInfo?.defaultModelName}</code>（默认端口 11434）<br />
-                <strong>LM Studio</strong>: 在 Settings → Service 启用 OpenAI 兼容，默认端口 1234；模型名称按 LM Studio 显示填写
+                {selectedModelInfo?.provider === 'ollama' ? (
+                  <>首次使用前需运行 <code className="text-cyan-400">ollama pull {selectedModelInfo?.defaultModelName}</code>（默认端口 11434）</>
+                ) : (
+                  <>在 LM Studio Developer → Server 启用 OpenAI 兼容；模型名称按 LM Studio 显示填写（默认端口 1234，用户常用 2233）</>
+                )}
               </p>
             </div>
           )}
@@ -207,11 +220,13 @@ function EmbeddingSettingsModal({ config, onSave, onClose }: EmbeddingSettingsMo
               提供商: {
                 selectedModelInfo?.provider === 'openai' ? 'OpenAI' :
                 selectedModelInfo?.provider === 'huggingface' ? 'HuggingFace / Jina' :
-                selectedModelInfo?.provider === 'ollama' ? 'Ollama (本地)' : '本地哈希'
+                selectedModelInfo?.provider === 'ollama' ? 'Ollama (本地)' :
+                selectedModelInfo?.provider === 'lmstudio' ? 'LM Studio (本地)' :
+                selectedModelInfo?.provider === 'local' ? '本地哈希' : '未知'
               }
               {apiKey && ' · 已配置 API Key'}
               {baseUrl && ` · ${baseUrl}`}
-              {ollamaModel && selectedModelInfo?.provider === 'ollama' && ` · 模型 ${ollamaModel}`}
+              {ollamaModel && (selectedModelInfo?.provider === 'ollama' || selectedModelInfo?.provider === 'lmstudio') && ` · 模型 ${ollamaModel}`}
             </p>
           </div>
 
