@@ -580,4 +580,124 @@ class MarkdownService {
 }
 
 export const markdownService = new MarkdownService();
+
+// ====================================================================
+// Text Chunking - 智能文本切片 (RAG 友好)
+// ====================================================================
+
+export interface ChunkOptions {
+  chunkSize?: number;            // 每块目标字符数, default 800
+  overlap?: number;              // 块间重叠, default 100
+  mode?: 'char' | 'sentence' | 'paragraph' | 'token';
+  preserveContext?: boolean;     // 块首加 "前文摘要" (前一句/段)
+  minChunkSize?: number;         // 最小块字符数, default 50
+  splitter?: 'regex' | 'punct';  // 句子切分方式
+}
+
+export interface TextChunk {
+  index: number;
+  text: string;
+  context?: string;              // 前文摘要
+  startOffset: number;
+  endOffset: number;
+  tokenEstimate: number;
+}
+
+function splitSentences(text: string, splitter: 'regex' | 'punct' = 'regex'): string[] {
+  if (splitter === 'punct') {
+    return text.split(/(?<=[.!?。!?;])\s+/).filter(s => s.trim().length > 0);
+  }
+  // regex: split on punctuation + Chinese/English sentence breaks
+  return text.split(/(?<=[.!?。!?;])\s+|(?<=[。！？])\s*/).filter(s => s.trim().length > 0);
+}
+
+function splitParagraphs(text: string): string[] {
+  return text.split(/\n\s*\n+/).filter(p => p.trim().length > 0);
+}
+
+function estimateTokens(s: string): number {
+  // 粗估: 中文字符 ≈ 1.5 token, 英文单词 ≈ 1 token, 标点 ≈ 0.5
+  const cn = (s.match(/[\u4e00-\u9fff]/g) || []).length;
+  const en = (s.match(/[a-zA-Z]+/g) || []).length;
+  const punct = (s.match(/[.,;:!?。！？；：、]/g) || []).length;
+  return Math.ceil(cn * 1.5 + en + punct * 0.5);
+}
+
+function chunkText(text: string, options: ChunkOptions = {}): TextChunk[] {
+  const {
+    chunkSize = 800, overlap = 100,
+    mode = 'sentence', preserveContext = false,
+    minChunkSize = 50, splitter = 'regex',
+  } = options;
+
+  if (!text || text.trim().length === 0) return [];
+
+  // Step 1: split into base units based on mode
+  let units: string[];
+  if (mode === 'char') {
+    units = [];
+    for (let i = 0; i < text.length; i += chunkSize) {
+      units.push(text.slice(i, i + chunkSize + overlap));
+    }
+  } else if (mode === 'paragraph') {
+    units = splitParagraphs(text);
+  } else {
+    units = splitSentences(text, splitter);
+  }
+
+  // Step 2: pack into chunks respecting chunkSize with overlap
+  const chunks: TextChunk[] = [];
+  let buffer = '';
+  let bufferStart = 0;
+  let cursor = 0;
+
+  const flush = (endOffset: number) => {
+    if (buffer.trim().length >= minChunkSize) {
+      let ctx: string | undefined;
+      if (preserveContext && chunks.length > 0) {
+        const last = chunks[chunks.length - 1];
+        const tail = last.text.slice(-100);
+        ctx = tail;
+      }
+      chunks.push({
+        index: chunks.length,
+        text: buffer.trim(),
+        context: ctx,
+        startOffset: bufferStart,
+        endOffset,
+        tokenEstimate: estimateTokens(buffer),
+      });
+    }
+    buffer = '';
+  };
+
+  for (const unit of units) {
+    const unitStart = cursor;
+    cursor += unit.length;
+    // If adding this unit exceeds chunkSize, flush
+    if (buffer.length > 0 && buffer.length + unit.length > chunkSize) {
+      const endOffset = unitStart;
+      flush(endOffset);
+      // Start new buffer with overlap from previous
+      if (overlap > 0 && buffer.length === 0) {
+        const tail = unit.slice(-overlap);
+        buffer = tail;
+        bufferStart = unitStart + unit.length - tail.length;
+      } else {
+        bufferStart = unitStart;
+      }
+    }
+    buffer += unit + ' ';
+    if (mode === 'char' && buffer.length >= chunkSize) {
+      flush(cursor);
+      bufferStart = cursor - overlap;
+    }
+  }
+  if (buffer.trim().length >= minChunkSize) {
+    flush(cursor);
+  }
+  return chunks;
+}
+
+export { chunkText };
 export default markdownService;

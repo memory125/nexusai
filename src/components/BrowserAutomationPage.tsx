@@ -15,8 +15,9 @@ import {
   dataScrapingService, ScrapeField, FieldTransform, ScrapeRecipe, PaginationResult, StructuredDataResult
 } from '../services/realWorldService';
 import { markdownService, MarkdownResult, CrawlConfig } from '../services/markdownService';
+import { crawlerService, CrawlDeepConfig, CrawledPage, CrawlDeepResult, CrawlPageState } from '../services/crawlerService';
 
-type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms' | 'schema' | 'pages' | 'structured' | 'recipes' | 'deepcrawl';
+type ToolTab = 'scrape' | 'api' | 'ping' | 'batch' | 'forms' | 'schema' | 'pages' | 'structured' | 'recipes' | 'deepcrawl' | 'crawler';
 
 const COMMON_SELECTORS: { label: string; selector: string; multiple: boolean; hint: string }[] = [
   { label: '标题',  selector: 'h1',                        multiple: false, hint: '页面主标题' },
@@ -824,6 +825,410 @@ function DeepCrawlPanel(props: {
   );
 }
 
+// ====================================================================
+// Smart Crawler Panel (multi-URL / BFS-DFS / Sitemap discovery)
+// ====================================================================
+
+function SmartCrawlerPanel(props: {
+  mode: 'multi' | 'deep' | 'sitemap' | 'prefetch';
+  setMode: (m: 'multi' | 'deep' | 'sitemap' | 'prefetch') => void;
+  strategy: 'bfs' | 'dfs' | 'best_first' | 'adaptive';
+  setStrategy: (s: 'bfs' | 'dfs' | 'best_first' | 'adaptive') => void;
+  urls: string; setUrls: (s: string) => void;
+  sitemapUrl: string; setSitemapUrl: (s: string) => void;
+  maxDepth: number; setMaxDepth: (n: number) => void;
+  maxPages: number; setMaxPages: (n: number) => void;
+  scoreThreshold: number; setScoreThreshold: (n: number) => void;
+  keywords: string; setKeywords: (s: string) => void;
+  allowedDomains: string; setAllowedDomains: (s: string) => void;
+  blockedDomains: string; setBlockedDomains: (s: string) => void;
+  urlPatterns: string; setUrlPatterns: (s: string) => void;
+  excludePatterns: string; setExcludePatterns: (s: string) => void;
+  adaptiveQuery: string; setAdaptiveQuery: (s: string) => void;
+  concurrency: number; setConcurrency: (n: number) => void;
+  delayMs: number; setDelayMs: (n: number) => void;
+  useCache: boolean; setUseCache: (b: boolean) => void;
+  rotateUA: boolean; setRotateUA: (b: boolean) => void;
+  customHeaders: string; setCustomHeaders: (s: string) => void;
+  result: CrawlDeepResult | null;
+  setResult: (r: CrawlDeepResult | null) => void;
+  loading: boolean; setLoading: (b: boolean) => void;
+  log: string[]; setLog: (l: string[]) => void;
+  abort: AbortController | null; setAbort: (a: AbortController | null) => void;
+  checkpointName: string; setCheckpointName: (s: string) => void;
+  savedStates: string[]; refreshStates: () => void;
+  sitemapDiscovered: string[]; setSitemapDiscovered: (u: string[]) => void;
+}) {
+  const p = props;
+  const addLog = (msg: string) => p.setLog([...p.log.slice(-200), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+
+  const buildConfig = (): CrawlDeepConfig | null => {
+    const startUrls = p.urls.split('\n').map(s => s.trim()).filter(Boolean);
+    if (startUrls.length === 0) {
+      if (p.mode === 'sitemap' && p.sitemapDiscovered.length > 0) {
+        // use discovered
+      } else return null;
+    }
+    let customHeaders: Record<string, string> | undefined;
+    if (p.customHeaders.trim()) {
+      try { customHeaders = JSON.parse(p.customHeaders); } catch { addLog('⚠️ 自定义 Headers JSON 解析失败,已忽略'); }
+    }
+    return {
+      strategy: p.strategy,
+      startUrls: p.mode === 'sitemap' ? p.sitemapDiscovered : startUrls,
+      maxDepth: p.maxDepth,
+      maxPages: p.maxPages,
+      scoreThreshold: p.scoreThreshold,
+      keywords: p.keywords.split(',').map(s => s.trim()).filter(Boolean),
+      keywordWeight: 0.7,
+      allowedDomains: p.allowedDomains.split(',').map(s => s.trim()).filter(Boolean),
+      blockedDomains: p.blockedDomains.split(',').map(s => s.trim()).filter(Boolean),
+      urlPatterns: p.urlPatterns.split('\n').map(s => s.trim()).filter(Boolean),
+      excludePatterns: p.excludePatterns.split('\n').map(s => s.trim()).filter(Boolean),
+      adaptiveQuery: p.adaptiveQuery,
+      adaptiveStagnation: 5,
+      concurrency: p.concurrency,
+      delayMs: p.delayMs,
+      useCache: p.useCache,
+      rotateUserAgent: p.rotateUA,
+      customHeaders,
+      hooks: {
+        beforeFetch: (u) => { addLog(`→ ${u.slice(0, 80)}`); },
+        afterFetch: (u, ok, ms) => { addLog(`  ${ok ? '✓' : '✗'} ${u.slice(0, 60)} (${ms}ms)`); },
+        onPageResult: (pg) => { addLog(`📄 d=${pg.depth} ${pg.url.slice(0, 60)} ${pg.fromCache ? '[cached]' : ''}`); },
+        onError: (u, e) => { addLog(`❌ ${u.slice(0, 60)}: ${e}`); },
+      },
+    };
+  };
+
+  const handleRun = async () => {
+    p.setLog([]);
+    p.setResult(null);
+    const cfg = buildConfig();
+    if (!cfg) { addLog('❌ 请先输入至少一个 URL 或发现 sitemap'); return; }
+    if (cfg.startUrls.length === 0) { addLog('❌ 没有可用的起始 URL'); return; }
+    const ctrl = new AbortController();
+    p.setAbort(ctrl);
+    p.setLoading(true);
+    addLog(`🚀 启动 ${p.mode === 'deep' ? p.strategy.toUpperCase() : p.mode} 模式 · ${cfg.startUrls.length} 起始 URL`);
+
+    try {
+      let result: CrawlDeepResult;
+      if (p.mode === 'multi' || p.mode === 'sitemap') {
+        result = await crawlerService.crawlMulti(cfg.startUrls, { ...cfg, signal: ctrl.signal });
+      } else if (p.mode === 'prefetch') {
+        result = await crawlerService.crawlPrefetch(cfg.startUrls, { ...cfg, signal: ctrl.signal });
+      } else {
+        result = await crawlerService.crawlDeep({ ...cfg, signal: ctrl.signal });
+      }
+      p.setResult(result);
+      addLog(`✅ 完成: ${result.stats.success} 成功 / ${result.stats.failed} 失败 · 用时 ${result.stats.durationMs}ms`);
+    } catch (e) {
+      addLog(`❌ 异常: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      p.setLoading(false);
+      p.setAbort(null);
+    }
+  };
+
+  const handleCancel = () => {
+    p.abort?.abort();
+    addLog('⏹ 已发送取消信号');
+  };
+
+  const handleDiscoverSitemap = async () => {
+    if (!p.sitemapUrl.trim()) { addLog('❌ 请输入站点 URL'); return; }
+    p.setLoading(true);
+    addLog(`🔍 发现 sitemap: ${p.sitemapUrl}`);
+    try {
+      const urls = await crawlerService.sitemap.discover(p.sitemapUrl.trim());
+      p.setSitemapDiscovered(urls);
+      p.setUrls(urls.join('\n'));
+      addLog(`✅ 发现 ${urls.length} 个 URL`);
+    } catch (e) {
+      addLog(`❌ ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      p.setLoading(false);
+    }
+  };
+
+  const handleSaveCheckpoint = () => {
+    if (!p.result || !p.checkpointName.trim()) { addLog('❌ 需要运行结果和名称'); return; }
+    crawlerService.saveStateToStorage(p.checkpointName.trim(), p.result.state);
+    p.refreshStates();
+    addLog(`💾 已保存检查点: ${p.checkpointName}`);
+  };
+
+  const handleLoadCheckpoint = (name: string) => {
+    const state = crawlerService.loadStateFromStorage(name);
+    if (state) {
+      const urls = state.visited.concat(state.pending.map(p => p.url));
+      p.setUrls(Array.from(new Set(urls)).join('\n'));
+      addLog(`📂 已加载检查点: ${name} (${state.pagesCrawled} 页已爬)`);
+    }
+  };
+
+  const downloadJson = () => {
+    if (!p.result) return;
+    const blob = new Blob([JSON.stringify(p.result, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `crawl-${Date.now()}.json`; a.click();
+  };
+
+  const downloadMarkdown = () => {
+    if (!p.result) return;
+    const md = p.result.pages.filter(p => p.ok).map(p =>
+      `# ${p.url}\n\n深度: ${p.depth} | 状态: ${p.status} | ${p.durationMs}ms\n\n${p.markdown || ''}\n\n---\n\n`
+    ).join('');
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `crawl-${Date.now()}.md`; a.click();
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+        Crawl4AI 风格智能爬虫:多 URL 并发 / BFS·DFS·BestFirst·Adaptive 深度 / Sitemap 发现 / 缓存 / 重试 / 检查点
+      </p>
+
+      {/* Mode tabs */}
+      <div className="flex gap-1 text-xs">
+        {[
+          ['multi', '📋 多 URL'],
+          ['deep', '🌳 深度爬取'],
+          ['sitemap', '🗺️ Sitemap'],
+          ['prefetch', '⚡ 快速发现'],
+        ].map(([m, l]) => (
+          <button key={m} onClick={() => p.setMode(m as any)}
+            className={`px-2 py-1 rounded ${p.mode === m ? 'bg-amber-500/20 text-amber-400' : 'hover:bg-white/5'}`}
+            style={{ color: p.mode === m ? undefined : 'var(--t-text-secondary)' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* Strategy for deep mode */}
+      {p.mode === 'deep' && (
+        <div className="flex gap-1 text-xs">
+          {(['bfs', 'dfs', 'best_first', 'adaptive'] as const).map(s => (
+            <button key={s} onClick={() => p.setStrategy(s)}
+              className={`px-2 py-1 rounded ${p.strategy === s ? 'bg-blue-500/20 text-blue-300' : 'hover:bg-white/5'}`}
+              style={{ color: p.strategy === s ? undefined : 'var(--t-text-secondary)' }}>
+              {s === 'bfs' ? 'BFS 广度' : s === 'dfs' ? 'DFS 深度' : s === 'best_first' ? 'BestFirst' : 'Adaptive 自适应'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* URL input */}
+      {p.mode === 'sitemap' ? (
+        <div className="flex gap-1.5">
+          <input value={p.sitemapUrl} onChange={e => p.setSitemapUrl(e.target.value)}
+            placeholder="站点 URL (例如 https://example.com)"
+            className="flex-1 glass-input rounded px-2 py-1.5 text-xs font-mono" />
+          <button onClick={handleDiscoverSitemap} disabled={p.loading}
+            className="px-2 py-1.5 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs disabled:opacity-50">
+            🔍 发现 Sitemap
+          </button>
+        </div>
+      ) : (
+        <textarea value={p.urls} onChange={e => p.setUrls(e.target.value)}
+          placeholder={`URL 列表 (每行一个):\nhttps://example.com\nhttps://example.com/blog\n${p.sitemapDiscovered.length > 0 ? `已发现 ${p.sitemapDiscovered.length} 个 sitemap URL` : ''}`}
+          rows={4}
+          className="w-full glass-input rounded p-2 text-xs font-mono" />
+      )}
+
+      {/* Depth + max pages row */}
+      {p.mode === 'deep' && (
+        <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+          <label style={{ color: 'var(--t-text-secondary)' }}>
+            最大深度
+            <input type="number" value={p.maxDepth} onChange={e => p.setMaxDepth(parseInt(e.target.value) || 1)}
+              className="w-full glass-input rounded px-2 py-1 text-xs mt-0.5" />
+          </label>
+          <label style={{ color: 'var(--t-text-secondary)' }}>
+            最大页数
+            <input type="number" value={p.maxPages} onChange={e => p.setMaxPages(parseInt(e.target.value) || 10)}
+              className="w-full glass-input rounded px-2 py-1 text-xs mt-0.5" />
+          </label>
+          <label style={{ color: 'var(--t-text-secondary)' }}>
+            分数阈值
+            <input type="number" step="0.05" value={p.scoreThreshold} onChange={e => p.setScoreThreshold(parseFloat(e.target.value) || 0)}
+              className="w-full glass-input rounded px-2 py-1 text-xs mt-0.5" />
+          </label>
+        </div>
+      )}
+
+      {/* Scorer + Adaptive query */}
+      {(p.mode === 'deep' || p.mode === 'multi') && (
+        <details className="text-[10px]">
+          <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>🎯 Scorer / 自适应停止 ({p.keywords ? p.keywords.split(',').length : 0} 关键词)</summary>
+          <div className="mt-1 space-y-1">
+            <input value={p.keywords} onChange={e => p.setKeywords(e.target.value)}
+              placeholder="关键词 (逗号分隔) - 用于 URL 相关性评分" className="w-full glass-input rounded px-2 py-1 text-xs" />
+            {p.strategy === 'adaptive' && (
+              <input value={p.adaptiveQuery} onChange={e => p.setAdaptiveQuery(e.target.value)}
+                placeholder="自适应查询 - 触发早停的信息目标" className="w-full glass-input rounded px-2 py-1 text-xs" />
+            )}
+          </div>
+        </details>
+      )}
+
+      {/* Filters */}
+      <details className="text-[10px]">
+        <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>🔍 过滤器 (URL 模式 / 域名)</summary>
+        <div className="mt-1 grid grid-cols-2 gap-1.5">
+          <input value={p.urlPatterns} onChange={e => p.setUrlPatterns(e.target.value)}
+            placeholder="URL 包含 (每行, 支持 * 通配)" className="glass-input rounded px-2 py-1 text-xs" />
+          <input value={p.excludePatterns} onChange={e => p.setExcludePatterns(e.target.value)}
+            placeholder="URL 排除 (每行)" className="glass-input rounded px-2 py-1 text-xs" />
+          <input value={p.allowedDomains} onChange={e => p.setAllowedDomains(e.target.value)}
+            placeholder="允许域名 (逗号)" className="glass-input rounded px-2 py-1 text-xs" />
+          <input value={p.blockedDomains} onChange={e => p.setBlockedDomains(e.target.value)}
+            placeholder="阻止域名 (逗号)" className="glass-input rounded px-2 py-1 text-xs" />
+        </div>
+      </details>
+
+      {/* Network options */}
+      <details className="text-[10px]">
+        <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>⚙️ 网络 / 缓存</summary>
+        <div className="mt-1 grid grid-cols-3 gap-1.5">
+          <label style={{ color: 'var(--t-text-secondary)' }}>
+            并发数
+            <input type="number" value={p.concurrency} onChange={e => p.setConcurrency(parseInt(e.target.value) || 1)}
+              className="w-full glass-input rounded px-2 py-1 text-xs mt-0.5" />
+          </label>
+          <label style={{ color: 'var(--t-text-secondary)' }}>
+            间隔 (ms)
+            <input type="number" value={p.delayMs} onChange={e => p.setDelayMs(parseInt(e.target.value) || 0)}
+              className="w-full glass-input rounded px-2 py-1 text-xs mt-0.5" />
+          </label>
+          <div className="flex flex-col gap-1 mt-3">
+            <label className="flex items-center gap-1 cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
+              <input type="checkbox" checked={p.useCache} onChange={e => p.setUseCache(e.target.checked)} className="rounded" />
+              缓存 ({crawlerService.cacheSize()})
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
+              <input type="checkbox" checked={p.rotateUA} onChange={e => p.setRotateUA(e.target.checked)} className="rounded" />
+              轮换 UA
+            </label>
+          </div>
+        </div>
+        <textarea value={p.customHeaders} onChange={e => p.setCustomHeaders(e.target.value)}
+          placeholder='自定义 Headers (JSON): {"Authorization": "Bearer ..."}' rows={2}
+          className="mt-1 w-full glass-input rounded p-1.5 text-xs font-mono" />
+        <button onClick={() => { crawlerService.clearCache(); addLog('🗑️ 缓存已清空'); }}
+          className="mt-1 text-[10px] px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-300">
+          🗑️ 清空缓存
+        </button>
+      </details>
+
+      {/* Checkpoint */}
+      <details className="text-[10px]">
+        <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>💾 检查点 (断点续爬 · {p.savedStates.length})</summary>
+        <div className="mt-1 flex gap-1.5">
+          <input value={p.checkpointName} onChange={e => p.setCheckpointName(e.target.value)}
+            placeholder="检查点名称" className="flex-1 glass-input rounded px-2 py-1 text-xs" />
+          <button onClick={handleSaveCheckpoint} className="px-2 py-1 rounded bg-green-500/20 hover:bg-green-500/30 text-green-300 text-xs">💾 保存</button>
+        </div>
+        {p.savedStates.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {p.savedStates.map(name => (
+              <span key={name} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <button onClick={() => handleLoadCheckpoint(name)} className="hover:underline" style={{ color: 'var(--t-accent-light)' }}>{name}</button>
+                <button onClick={() => { crawlerService.deleteState(name); p.refreshStates(); }} className="text-red-400 hover:text-red-300">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </details>
+
+      {/* Run row */}
+      <div className="flex items-center gap-2">
+        {!p.loading ? (
+          <button onClick={handleRun}
+            className="px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs flex items-center gap-1.5">
+            <Globe className="h-3.5 w-3.5" />
+            启动爬虫
+          </button>
+        ) : (
+          <button onClick={handleCancel}
+            className="px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs flex items-center gap-1.5">
+            <X className="h-3.5 w-3.5" /> 取消
+          </button>
+        )}
+        {p.result && (
+          <>
+            <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+              ✓ {p.result.stats.success} 成功 · ✗ {p.result.stats.failed} 失败
+              {p.result.stats.fromCache > 0 && ` · 💾 ${p.result.stats.fromCache} 缓存`}
+              {p.result.stats.maxDepthReached > 0 && ` · 深度 ${p.result.stats.maxDepthReached}`}
+              · {p.result.stats.durationMs}ms
+            </div>
+            <div className="flex-1" />
+            <button onClick={downloadJson} className="text-[10px] px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300">JSON</button>
+            <button onClick={downloadMarkdown} className="text-[10px] px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300">MD</button>
+          </>
+        )}
+      </div>
+
+      {/* Live log */}
+      {p.log.length > 0 && (
+        <div className="rounded p-2 text-[10px] font-mono max-h-32 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text-secondary)' }}>
+          {p.log.slice(-30).map((l, i) => <div key={i}>{l}</div>)}
+        </div>
+      )}
+
+      {/* Results table */}
+      {p.result && p.result.pages.length > 0 && (
+        <details open className="text-[10px]">
+          <summary className="cursor-pointer" style={{ color: 'var(--t-text-secondary)' }}>
+            📑 页面结果 ({p.result.pages.length})
+            {p.result.discoveredUrls.length > p.result.pages.length && ` · 🔍 已发现 ${p.result.discoveredUrls.length} URL`}
+          </summary>
+          <div className="mt-1 max-h-72 overflow-y-auto rounded border" style={{ borderColor: 'var(--t-glass-border)' }}>
+            <table className="w-full">
+              <thead className="sticky top-0" style={{ background: 'var(--t-bg-secondary)' }}>
+                <tr>
+                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>✓</th>
+                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>深</th>
+                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>分</th>
+                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>URL</th>
+                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>大小</th>
+                  <th className="px-1 py-1 text-left" style={{ color: 'var(--t-accent-light)' }}>耗时</th>
+                </tr>
+              </thead>
+              <tbody>
+                {p.result.pages.map((pg, i) => (
+                  <tr key={i} className="hover:bg-white/5">
+                    <td className="px-1 py-0.5">{pg.ok ? (pg.fromCache ? '💾' : '✓') : '✗'}</td>
+                    <td className="px-1 py-0.5">{pg.depth}</td>
+                    <td className="px-1 py-0.5">{pg.score != null ? pg.score.toFixed(2) : '-'}</td>
+                    <td className="px-1 py-0.5 max-w-xs truncate" title={pg.url}>
+                      {pg.url}
+                      {pg.error && <span className="text-red-400 ml-1">({pg.error.slice(0, 30)})</span>}
+                    </td>
+                    <td className="px-1 py-0.5">{(pg.sizeBytes / 1024).toFixed(1)}k</td>
+                    <td className="px-1 py-0.5">{pg.durationMs}ms{pg.retries > 0 ? ` (×${pg.retries})` : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {p.result.discoveredUrls.length > p.result.pages.length && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-[10px]" style={{ color: 'var(--t-text-secondary)' }}>
+                🔍 未爬取的已发现 URL ({p.result.discoveredUrls.length - p.result.pages.length})
+              </summary>
+              <div className="mt-1 max-h-24 overflow-y-auto text-[10px] font-mono" style={{ color: 'var(--t-text-muted)' }}>
+                {p.result.discoveredUrls.filter(u => !p.result!.pages.some(pg => pg.url === u)).slice(0, 50).map((u, i) => <div key={i} className="truncate">{u}</div>)}
+              </div>
+            </details>
+          )}
+        </details>
+      )}
+    </div>
+  );
+}
+
 export function BrowserAutomationPage() {
   const [sessions, setSessions] = useState<BrowserSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -920,6 +1325,34 @@ export function BrowserAutomationPage() {
   const [dcResult, setDcResult] = useState<MarkdownResult | null>(null);
   const [dcLoading, setDcLoading] = useState(false);
   const [dcView, setDcView] = useState<'raw' | 'fit' | 'cited'>('fit');
+
+  // Smart Crawler state (multi-URL / deep crawl / sitemap)
+  const [crMode, setCrMode] = useState<'multi' | 'deep' | 'sitemap' | 'prefetch'>('multi');
+  const [crStrategy, setCrStrategy] = useState<'bfs' | 'dfs' | 'best_first' | 'adaptive'>('bfs');
+  const [crUrls, setCrUrls] = useState('');
+  const [crSitemapUrl, setCrSitemapUrl] = useState('');
+  const [crMaxDepth, setCrMaxDepth] = useState(2);
+  const [crMaxPages, setCrMaxPages] = useState(20);
+  const [crScoreThreshold, setCrScoreThreshold] = useState(0);
+  const [crKeywords, setCrKeywords] = useState('');
+  const [crAllowedDomains, setCrAllowedDomains] = useState('');
+  const [crBlockedDomains, setCrBlockedDomains] = useState('');
+  const [crUrlPatterns, setCrUrlPatterns] = useState('');
+  const [crExcludePatterns, setCrExcludePatterns] = useState('');
+  const [crAdaptiveQuery, setCrAdaptiveQuery] = useState('');
+  const [crConcurrency, setCrConcurrency] = useState(3);
+  const [crDelayMs, setCrDelayMs] = useState(500);
+  const [crUseCache, setCrUseCache] = useState(true);
+  const [crRotateUA, setCrRotateUA] = useState(false);
+  const [crCustomHeaders, setCrCustomHeaders] = useState('');
+  const [crResult, setCrResult] = useState<CrawlDeepResult | null>(null);
+  const [crLoading, setCrLoading] = useState(false);
+  const [crLog, setCrLog] = useState<string[]>([]);
+  const [crAbort, setCrAbort] = useState<AbortController | null>(null);
+  const [crCheckpointName, setCrCheckpointName] = useState('');
+  const [crSavedStates, setCrSavedStates] = useState<string[]>([]);
+  const [crSitemapDiscovered, setCrSitemapDiscovered] = useState<string[]>([]);
+  const refreshCrStates = () => setCrSavedStates(crawlerService.listSavedStates());
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1244,6 +1677,7 @@ export function BrowserAutomationPage() {
           { id: 'pages', label: '分页爬取', icon: ListTree },
           { id: 'structured', label: '结构化数据', icon: Database },
           { id: 'deepcrawl', label: '深度爬取', icon: Layers },
+          { id: 'crawler', label: '智能爬虫', icon: Globe },
           { id: 'recipes', label: '配方库', icon: BookOpen },
           { id: 'api', label: 'API 测试', icon: Code2 },
           { id: 'ping', label: '连接测试', icon: Activity },
@@ -1633,6 +2067,37 @@ export function BrowserAutomationPage() {
               XLSX.utils.book_append_sheet(wb, ws, 'Schema');
               XLSX.writeFile(wb, `recipe-${r.name}.xlsx`);
             }}
+          />
+        )}
+
+        {/* Smart Crawler (multi-URL / deep / sitemap) */}
+        {toolTab === 'crawler' && (
+          <SmartCrawlerPanel
+            mode={crMode} setMode={setCrMode}
+            strategy={crStrategy} setStrategy={setCrStrategy}
+            urls={crUrls} setUrls={setCrUrls}
+            sitemapUrl={crSitemapUrl} setSitemapUrl={setCrSitemapUrl}
+            maxDepth={crMaxDepth} setMaxDepth={setCrMaxDepth}
+            maxPages={crMaxPages} setMaxPages={setCrMaxPages}
+            scoreThreshold={crScoreThreshold} setScoreThreshold={setCrScoreThreshold}
+            keywords={crKeywords} setKeywords={setCrKeywords}
+            allowedDomains={crAllowedDomains} setAllowedDomains={setCrAllowedDomains}
+            blockedDomains={crBlockedDomains} setBlockedDomains={setCrBlockedDomains}
+            urlPatterns={crUrlPatterns} setUrlPatterns={setCrUrlPatterns}
+            excludePatterns={crExcludePatterns} setExcludePatterns={setCrExcludePatterns}
+            adaptiveQuery={crAdaptiveQuery} setAdaptiveQuery={setCrAdaptiveQuery}
+            concurrency={crConcurrency} setConcurrency={setCrConcurrency}
+            delayMs={crDelayMs} setDelayMs={setCrDelayMs}
+            useCache={crUseCache} setUseCache={setCrUseCache}
+            rotateUA={crRotateUA} setRotateUA={setCrRotateUA}
+            customHeaders={crCustomHeaders} setCustomHeaders={setCrCustomHeaders}
+            result={crResult} setResult={setCrResult}
+            loading={crLoading} setLoading={setCrLoading}
+            log={crLog} setLog={setCrLog}
+            abort={crAbort} setAbort={setCrAbort}
+            checkpointName={crCheckpointName} setCheckpointName={setCrCheckpointName}
+            savedStates={crSavedStates} refreshStates={refreshCrStates}
+            sitemapDiscovered={crSitemapDiscovered} setSitemapDiscovered={setCrSitemapDiscovered}
           />
         )}
 
