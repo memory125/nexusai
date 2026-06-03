@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Globe, Play, Camera, FileText, Download, Search,
   X, Clock, RotateCcw, CheckCircle, AlertCircle, Loader2, Zap, Code2, Activity, ListTree, Send,
-  Database, Layers, Save, Trash, BookOpen, Image as ImageIcon, Hash, Eye, Code, Info, BarChart3, ListOrdered
+  Database, Layers, Save, Trash, BookOpen, Image as ImageIcon, Hash, Eye, Code, Info, BarChart3, ListOrdered,
+  Maximize2, Minimize2, ExternalLink, Filter
 } from 'lucide-react';
 import {
   browserAutomationService,
@@ -84,6 +85,44 @@ function addHeaderIds(md: string, toc: TocItem[]): string {
     const item = toc[i++];
     return item ? `${hashes} <a id="${item.id}"></a>${text}` : full;
   });
+}
+
+// ============ Fullscreen result modal ============
+function FullscreenResultModal({ open, onClose, children, title }: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  title: string;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.85)' }}
+      onClick={onClose}>
+      <div className="flex items-center justify-between p-3 border-b" style={{ background: 'var(--t-bg)', borderColor: 'var(--t-glass-border)' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--t-text)' }}>
+          <Maximize2 className="h-4 w-4 text-amber-400" />
+          {title}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>按 ESC 关闭</span>
+          <button onClick={onClose}
+            className="p-1.5 rounded hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-hidden" onClick={e => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 const COMMON_SELECTORS: { label: string; selector: string; multiple: boolean; hint: string }[] = [
@@ -760,6 +799,20 @@ function DeepCrawlPanel(props: {
   const toc = useMemo(() => extractToc(result?.fit_markdown || ''), [result]);
   const safePreviewHtml = useMemo(() => result ? sanitizeHtml(addHeaderIds(result.fit_html, toc)) : '', [result, toc]);
   const previewRef = useRef<HTMLDivElement>(null);
+  const fsPreviewRef = useRef<HTMLDivElement>(null);
+  const [dcFsView, setDcFsView] = useState<'preview' | 'source' | 'cited' | 'meta'>('preview');
+  const [dcFsOpen, setDcFsOpen] = useState(false);
+  const [dcFsAuto, setDcFsAuto] = useState(true);
+  const lastAutoOpenedRef = useRef<string | null>(null);
+  // Auto-open fullscreen on new result
+  useEffect(() => {
+    if (!result || !dcFsAuto) return;
+    const sig = result.raw_markdown.slice(0, 100) + result.raw_markdown.length;
+    if (lastAutoOpenedRef.current === sig) return;
+    lastAutoOpenedRef.current = sig;
+    setDcFsView(view);
+    setDcFsOpen(true);
+  }, [result, dcFsAuto, view]);
 
   return (
     <div className="space-y-2">
@@ -907,6 +960,12 @@ function DeepCrawlPanel(props: {
                 </button>
               ))}
             </div>
+            <button onClick={() => { setDcFsView(view); setDcFsOpen(true); }}
+              className="ml-1 px-2 py-1 text-[10px] rounded flex items-center gap-1"
+              style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}
+              title="全屏预览 (按 ESC 退出)">
+              <Maximize2 className="h-3 w-3" />全屏
+            </button>
           </>
         )}
       </div>
@@ -1041,6 +1100,118 @@ function DeepCrawlPanel(props: {
           )}
         </div>
       )}
+
+      {/* Fullscreen modal */}
+      <FullscreenResultModal open={dcFsOpen} onClose={() => setDcFsOpen(false)}
+        title={result?.metadata?.title || '深度爬取结果'}>
+        {result && (
+          <div className="h-full flex flex-col" style={{ background: 'var(--t-bg)' }}>
+            <div className="flex items-center gap-1.5 p-2 border-b flex-wrap" style={{ borderColor: 'var(--t-glass-border)' }}>
+              {([
+                ['preview', '👁 预览', Eye],
+                ['source', '⌨ 源码', Code],
+                ['cited', '🔗 引用', ListOrdered],
+                ['meta', '📊 元数据', BarChart3],
+              ] as const).map(([v, label, Icon]) => (
+                <button key={v} onClick={() => setDcFsView(v)}
+                  className="px-2.5 py-1 text-xs rounded flex items-center gap-1"
+                  style={{ background: dcFsView === v ? 'var(--t-accent-subtle)' : 'rgba(255,255,255,0.05)', color: dcFsView === v ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                  <Icon className="h-3.5 w-3.5" />{label}
+                </button>
+              ))}
+              <div className="flex-1" />
+              <div className="text-[10px] flex items-center gap-3 px-2" style={{ color: 'var(--t-text-muted)' }}>
+                <span>📊 {result.stats.rawChars.toLocaleString()} → <span className="text-green-400">{result.stats.fitChars.toLocaleString()}</span> ({ratio}%)</span>
+                <span>·</span>
+                <span>🔗 {result.internal_links.length}/{result.external_links.length}</span>
+                <span>·</span>
+                <span>🖼️ {result.media.length}</span>
+              </div>
+              <label className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--t-text-muted)' }} title="完成后自动全屏">
+                <input type="checkbox" checked={dcFsAuto} onChange={e => setDcFsAuto(e.target.checked)} />
+                自动
+              </label>
+            </div>
+            <div className="flex-1 overflow-hidden flex">
+              {dcFsView === 'preview' && (
+                <>
+                  {toc.length > 0 && (
+                    <div className="w-52 flex-shrink-0 p-3 overflow-y-auto border-r" style={{ borderColor: 'var(--t-glass-border)', background: 'rgba(0,0,0,0.2)' }}>
+                      <div className="text-xs font-semibold mb-2" style={{ color: 'var(--t-text-secondary)' }}>📑 目录 ({toc.length})</div>
+                      {toc.map((h, i) => (
+                        <a key={i} href={`#${h.id}`} onClick={(e) => { e.preventDefault(); fsPreviewRef.current?.querySelector('#' + h.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                          className="block text-xs py-0.5 px-1 rounded hover:bg-white/5 truncate"
+                          style={{ paddingLeft: `${(h.level - 1) * 10 + 4}px`, color: 'var(--t-text-muted)' }}>
+                          {h.text}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <div ref={fsPreviewRef} className="flex-1 overflow-y-auto p-6 prose-content text-base"
+                    style={{ color: 'var(--t-text)', lineHeight: '1.7' }}
+                    dangerouslySetInnerHTML={{ __html: safePreviewHtml }} />
+                </>
+              )}
+              {dcFsView === 'source' && (
+                <pre className="flex-1 m-3 p-4 rounded-lg text-sm font-mono whitespace-pre-wrap break-words overflow-auto"
+                  style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', lineHeight: '1.6' }}>
+                  {result.raw_markdown || '(空)'}
+                </pre>
+              )}
+              {dcFsView === 'cited' && (
+                <pre className="flex-1 m-3 p-4 rounded-lg text-sm font-mono whitespace-pre-wrap break-words overflow-auto"
+                  style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', lineHeight: '1.6' }}>
+                  {result.markdown_with_citations || '(无引用)'}
+                </pre>
+              )}
+              {dcFsView === 'meta' && (
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
+                  <div className="rounded p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                    <div className="font-semibold mb-2" style={{ color: 'var(--t-text-secondary)' }}>📄 页面元数据</div>
+                    <div className="space-y-1" style={{ color: 'var(--t-text-muted)' }}>
+                      {result.metadata.title && <div>标题: <span style={{ color: 'var(--t-text)' }}>{result.metadata.title}</span></div>}
+                      {result.metadata.description && <div>描述: <span style={{ color: 'var(--t-text)' }}>{result.metadata.description}</span></div>}
+                      {result.metadata.author && <div>作者: <span style={{ color: 'var(--t-text)' }}>{result.metadata.author}</span></div>}
+                      {result.metadata.canonical && <div className="truncate">规范: <a href={result.metadata.canonical} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--t-accent-light)' }}>{result.metadata.canonical}</a></div>}
+                      {result.metadata.lang && <div>语言: <span style={{ color: 'var(--t-text)' }}>{result.metadata.lang}</span></div>}
+                      {result.metadata.keywords && <div>关键词: <span style={{ color: 'var(--t-text)' }}>{result.metadata.keywords}</span></div>}
+                    </div>
+                  </div>
+                  <div className="rounded p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                    <div className="font-semibold mb-2" style={{ color: 'var(--t-text-secondary)' }}>🔗 链接 ({result.internal_links.length + result.external_links.length})</div>
+                    <div className="grid grid-cols-2 gap-1 max-h-[60vh] overflow-y-auto">
+                      {[...result.internal_links, ...result.external_links].map((l, i) => (
+                        <a key={i} href={l.href} target="_blank" rel="noopener noreferrer"
+                          className="rounded p-1.5 truncate text-xs hover:bg-white/5 block"
+                          style={{ color: l.internal ? 'var(--t-text)' : 'var(--t-text-muted)' }} title={l.href}>
+                          {l.internal ? '🔗' : '🌐'} {l.text || l.href}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                    <div className="font-semibold mb-2" style={{ color: 'var(--t-text-secondary)' }}>🖼️ 媒体 ({result.media.length})</div>
+                    {result.media.length > 0 ? (
+                      <div className="grid grid-cols-8 gap-2 max-h-[60vh] overflow-y-auto">
+                        {result.media.slice(0, 64).map((m, i) => (
+                          <a key={i} href={m.src} target="_blank" rel="noopener noreferrer" className="rounded p-1 block" style={{ background: 'rgba(0,0,0,0.3)' }}>
+                            {m.type === 'image' ? (
+                              <img src={m.src} alt={m.alt} className="w-full h-20 object-cover rounded"
+                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            ) : (
+                              <div className="h-20 flex items-center justify-center text-2xl" style={{ color: 'var(--t-text-muted)' }}>🎬</div>
+                            )}
+                          </a>
+                        ))}
+                      </div>
+                    ) : <div style={{ color: 'var(--t-text-muted)' }}>(无)</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </FullscreenResultModal>
     </div>
   );
 }
@@ -1239,6 +1410,16 @@ function SmartCrawlerPanel(props: {
     const a = document.createElement('a'); a.href = url; a.download = filename;
     a.click(); URL.revokeObjectURL(url);
   };
+  const [crFsOpen, setCrFsOpen] = useState(false);
+  const [crFsAuto, setCrFsAuto] = useState(true);
+  const crFsLastAutoRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!p.result || !crFsAuto) return;
+    const sig = p.result.pages.length + ':' + p.result.stats.durationMs;
+    if (crFsLastAutoRef.current === sig) return;
+    crFsLastAutoRef.current = sig;
+    setCrFsOpen(true);
+  }, [p.result, crFsAuto]);
 
   return (
     <div className="space-y-2">
@@ -1460,6 +1641,12 @@ function SmartCrawlerPanel(props: {
               · {p.result.stats.durationMs}ms
             </div>
             <div className="flex-1" />
+            <button onClick={() => setCrFsOpen(true)}
+              className="text-[10px] px-2 py-1 rounded flex items-center gap-1"
+              style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}
+              title="全屏预览 (按 ESC 退出)">
+              <Maximize2 className="h-3 w-3" />全屏
+            </button>
             <button onClick={downloadJson} className="text-[10px] px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300">JSON</button>
             <button onClick={downloadMarkdown} className="text-[10px] px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300">MD</button>
           </>
@@ -1656,6 +1843,98 @@ function SmartCrawlerPanel(props: {
         </div>
         );
       })()}
+
+      {/* Fullscreen modal */}
+      <FullscreenResultModal open={crFsOpen} onClose={() => setCrFsOpen(false)}
+        title={p.result ? `智能爬虫结果 · ${p.result.pages.length} 页` : '智能爬虫结果'}>
+        {p.result && (
+          <div className="h-full flex flex-col" style={{ background: 'var(--t-bg)' }}>
+            <div className="flex items-center gap-1.5 p-2 border-b flex-wrap" style={{ borderColor: 'var(--t-glass-border)' }}>
+              <div className="flex rounded overflow-hidden" style={{ border: '1px solid var(--t-glass-border)' }}>
+                {[
+                  ['all', `全部 ${p.result.pages.length}`],
+                  ['success', `✓ ${p.result.stats.success}`],
+                  ['fail', `✗ ${p.result.stats.failed}`],
+                  ['cached', `💾 ${p.result.stats.fromCache}`],
+                ].map(([k, l]) => (
+                  <button key={k} onClick={() => setCrFilter(k as any)}
+                    className="px-2 py-1 text-[10px]"
+                    style={{ background: crFilter === k ? 'var(--t-accent-subtle)' : 'transparent', color: crFilter === k ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <div className="flex rounded overflow-hidden" style={{ border: '1px solid var(--t-glass-border)' }}>
+                {(['order', 'score', 'size', 'duration', 'depth'] as const).map(k => (
+                  <button key={k} onClick={() => setCrSort(k)}
+                    className="px-2 py-1 text-[10px]"
+                    style={{ background: crSort === k ? 'var(--t-accent-subtle)' : 'transparent', color: crSort === k ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                    {k === 'order' ? '顺序' : k === 'score' ? '分' : k === 'size' ? '大小' : k === 'duration' ? '耗时' : '深'}
+                  </button>
+                ))}
+              </div>
+              <input value={crQuery} onChange={e => setCrQuery(e.target.value)}
+                placeholder="🔍 搜索..."
+                className="flex-1 min-w-32 glass-input rounded px-2 py-1 text-xs" />
+              <label className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--t-text-muted)' }} title="完成后自动全屏">
+                <input type="checkbox" checked={crFsAuto} onChange={e => setCrFsAuto(e.target.checked)} />
+                自动
+              </label>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="max-w-4xl mx-auto space-y-3">
+                {filteredPages.length === 0 && (
+                  <div className="text-center py-12 text-sm" style={{ color: 'var(--t-text-muted)' }}>无匹配页面</div>
+                )}
+                {filteredPages.map((pg, i) => {
+                  const titleMatch = pg.markdown?.match(/^#+\s*(.+)/m);
+                  const title = titleMatch?.[1]?.trim() || pg.url.split('/').filter(Boolean).pop() || pg.url;
+                  return (
+                    <div key={i} className="rounded-lg overflow-hidden" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--t-glass-border)' }}>
+                      <div className="flex items-start gap-3 p-3">
+                        <div className="text-lg pt-0.5">
+                          {pg.ok ? (pg.fromCache ? '💾' : '✓') : '✗'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 text-xs flex-wrap" style={{ color: 'var(--t-text-muted)' }}>
+                            <span className="px-1.5 rounded" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--t-accent-light)' }}>深{pg.depth}</span>
+                            {pg.score != null && <span className="px-1.5 rounded" style={{ background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>分{pg.score.toFixed(2)}</span>}
+                            <span>{(pg.sizeBytes / 1024).toFixed(1)}k</span>
+                            <span>·</span>
+                            <span>{pg.durationMs}ms{pg.retries > 0 ? ` ×${pg.retries}` : ''}</span>
+                          </div>
+                          <div className="text-base font-semibold mt-1" style={{ color: 'var(--t-text)' }}>
+                            {pg.ok ? title : `❌ ${pg.error?.slice(0, 80) || '抓取失败'}`}
+                          </div>
+                          <div className="text-xs truncate" style={{ color: 'var(--t-text-muted)' }} title={pg.url}>
+                            {pg.url}
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <a href={pg.url} target="_blank" rel="noopener noreferrer"
+                            className="px-2 py-1 rounded text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" />打开
+                          </a>
+                          <button onClick={() => crDownload(pg.markdown || '', `${pg.url.replace(/[^a-z0-9]+/gi, '-').slice(-40)}.md`, 'text/markdown')}
+                            className="px-2 py-1 rounded text-xs bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>
+                            💾 MD
+                          </button>
+                        </div>
+                      </div>
+                      {pg.markdown && (
+                        <pre className="px-3 pb-3 text-xs font-mono whitespace-pre-wrap break-words max-h-80 overflow-y-auto"
+                          style={{ color: 'var(--t-text-secondary)' }}>
+                          {pg.markdown}
+                        </pre>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </FullscreenResultModal>
     </div>
   );
 }
@@ -2134,7 +2413,7 @@ export function BrowserAutomationPage() {
       </div>
 
       {/* Tool Panels */}
-      <div className="px-6 py-3 border-b max-h-96 overflow-y-auto" style={{ borderColor: 'var(--t-glass-border)' }}>
+      <div className="px-6 py-3 border-b overflow-y-auto" style={{ borderColor: 'var(--t-glass-border)', maxHeight: toolTab === 'deepcrawl' || toolTab === 'crawler' ? '70vh' : '24rem' }}>
         {/* CSS Scrape (existing) */}
         {toolTab === 'scrape' && (
           <div>
