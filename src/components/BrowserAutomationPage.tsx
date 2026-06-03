@@ -125,43 +125,241 @@ function FullscreenResultModal({ open, onClose, children, title }: {
   );
 }
 
-const COMMON_SELECTORS: { label: string; selector: string; multiple: boolean; hint: string }[] = [
-  { label: '标题',  selector: 'h1',                        multiple: false, hint: '页面主标题' },
-  { label: '所有标题', selector: 'h1, h2, h3',             multiple: true,  hint: '全部标题层级' },
-  { label: '段落',  selector: 'p',                         multiple: true,  hint: '所有段落文本' },
-  { label: '链接',  selector: 'a[href]',                   multiple: true,  hint: '全部超链接' },
-  { label: '图片',  selector: 'img',                       multiple: true,  hint: '图片 src+alt' },
-  { label: '列表',  selector: 'li',                        multiple: true,  hint: '列表项' },
-  { label: '表格行', selector: 'table tr',                 multiple: true,  hint: '表格所有行' },
-  { label: '按钮',  selector: 'button, [role="button"]',   multiple: true,  hint: '可点击元素' },
-  { label: '文章',  selector: 'article',                   multiple: true,  hint: 'article 元素' },
-  { label: '元描述', selector: 'meta[name="description"]', multiple: false, hint: 'meta 描述' },
-  { label: '价格',  selector: '.price, [class*="price" i]', multiple: true, hint: '含 price 的元素' },
-  { label: 'JSON-LD', selector: 'script[type="application/ld+json"]', multiple: false, hint: '结构化数据' },
-];
+// ============ Inline result renderer for the center panel ============
+function CrawlResultCenter(props: {
+  kind: 'deepcrawl' | 'crawler';
+  dcResult?: MarkdownResult | null;
+  crResult?: CrawlDeepResult | null;
+  onOpenFullscreen: () => void;
+}) {
+  const { kind, dcResult, crResult, onOpenFullscreen } = props;
+  const [view, setView] = useState<'preview' | 'source' | 'cited' | 'meta'>('preview');
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [crExpanded, setCrExpanded] = useState<Set<number>>(new Set());
+  const toc = useMemo(() => dcResult ? extractToc(dcResult.fit_markdown) : [], [dcResult]);
+  const safeHtml = useMemo(() => dcResult ? sanitizeHtml(addHeaderIds(dcResult.fit_html, toc)) : '', [dcResult, toc]);
 
-function SelectorPresets({ onPick, multiple }: { onPick: (s: { selector: string; multiple: boolean }) => void; multiple?: boolean }) {
-  const items = multiple === undefined ? COMMON_SELECTORS : COMMON_SELECTORS.filter(s => s.multiple === multiple);
-  return (
-    <div className="flex flex-wrap gap-1.5 mt-2">
-      {items.map(s => (
-        <button
-          key={s.selector}
-          onClick={() => onPick({ selector: s.selector, multiple: s.multiple })}
-          title={`${s.selector}  ·  ${s.hint}`}
-          className="text-xs px-2 py-1 rounded-md transition-colors hover:scale-105"
-          style={{
-            background: 'var(--t-accent-subtle)',
-            color: 'var(--t-accent-light)',
-            border: '1px solid var(--t-glass-border)',
-          }}
-        >
-          {s.label}
-        </button>
-      ))}
-    </div>
-  );
+  // Deep crawl: render markdown result
+  if (kind === 'deepcrawl' && dcResult) {
+    const md = view === 'source' ? dcResult.raw_markdown : view === 'cited' ? dcResult.markdown_with_citations : dcResult.fit_markdown;
+    const ratio = (dcResult.stats.fitChars / Math.max(dcResult.stats.rawChars, 1) * 100).toFixed(1);
+    const copy = (s: string) => navigator.clipboard?.writeText(s);
+    const download = (s: string, fn: string, m: string) => { const b = new Blob([s], { type: m }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = fn; a.click(); URL.revokeObjectURL(a.href); };
+    return (
+      <div className="space-y-3 h-full flex flex-col">
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--t-glass-border)' }}>
+            {([
+              ['preview', '👁 预览', Eye],
+              ['source', '⌨ 源码', Code],
+              ['cited', '🔗 引用', ListOrdered],
+              ['meta', '📊 元数据', BarChart3],
+            ] as const).map(([v, label, Icon]) => (
+              <button key={v} onClick={() => setView(v)} className="px-2.5 py-1 flex items-center gap-1"
+                style={{ background: view === v ? 'var(--t-accent-subtle)' : 'transparent', color: view === v ? 'var(--t-accent-light)' : 'var(--t-text-muted)' }}>
+                <Icon className="h-3.5 w-3.5" />{label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1" />
+          <button onClick={() => copy(md)} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📋 复制</button>
+          <button onClick={() => download(md, `crawl-${Date.now()}.md`, 'text/markdown')} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>💾 MD</button>
+          <button onClick={() => download(dcResult.fit_html, `crawl-${Date.now()}.html`, 'text/html')} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>🌐 HTML</button>
+          <button onClick={() => download(JSON.stringify(dcResult, null, 2), `crawl-${Date.now()}.json`, 'application/json')} className="px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📦 JSON</button>
+          <button onClick={onOpenFullscreen} className="ml-1 px-2.5 py-1 rounded flex items-center gap-1" style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}>
+            <Maximize2 className="h-3.5 w-3.5" />全屏
+          </button>
+        </div>
+
+        {/* Stats card */}
+        <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+          <div className="flex items-center justify-between text-[10px]">
+            <span style={{ color: 'var(--t-text-muted)' }}>📊 内容压缩</span>
+            <span className="font-mono" style={{ color: 'var(--t-text-secondary)' }}>
+              <span className="text-gray-400">{dcResult.stats.rawChars.toLocaleString()}</span>
+              <span className="mx-1">→</span>
+              <span className="text-green-400 font-semibold">{dcResult.stats.fitChars.toLocaleString()}</span>
+              <span className="ml-2 text-amber-400">{ratio}%</span>
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.3)' }}>
+            <div className="h-full rounded-full" style={{ width: `${Math.min(parseFloat(ratio), 100)}%`, background: parseFloat(ratio) > 50 ? 'linear-gradient(90deg,#10b981,#22d3ee)' : 'linear-gradient(90deg,#f59e0b,#10b981)' }} />
+          </div>
+          <div className="grid grid-cols-4 gap-2 text-[10px]">
+            {[
+              { l: '内容块', v: `${dcResult.stats.blocksKept}/${dcResult.stats.blocksTotal}`, c: 'var(--t-text)' },
+              { l: '内链', v: dcResult.internal_links.length, c: 'var(--t-accent-light)' },
+              { l: '外链', v: dcResult.external_links.length, c: 'var(--t-accent-light)' },
+              { l: '媒体', v: dcResult.media.length, c: 'var(--t-accent-light)' },
+            ].map((s, i) => (
+              <div key={i} className="rounded p-1.5 text-center" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <div className="text-base font-semibold" style={{ color: s.c }}>{s.v}</div>
+                <div style={{ color: 'var(--t-text-muted)' }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        {view === 'preview' && (
+          <div className="flex gap-2 flex-1 min-h-0">
+            {toc.length > 0 && (
+              <div className="w-40 flex-shrink-0 rounded-lg p-2 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <div className="text-[10px] font-semibold mb-1" style={{ color: 'var(--t-text-secondary)' }}>📑 目录 ({toc.length})</div>
+                {toc.map((h, i) => (
+                  <a key={i} href={`#${h.id}`} onClick={(e) => { e.preventDefault(); previewRef.current?.querySelector('#' + h.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                    className="block text-[10px] py-0.5 px-1 rounded hover:bg-white/5 truncate"
+                    style={{ paddingLeft: `${(h.level - 1) * 8 + 4}px`, color: 'var(--t-text-muted)' }}>
+                    {h.text}
+                  </a>
+                ))}
+              </div>
+            )}
+            <div ref={previewRef} className="flex-1 rounded-lg p-4 prose-content overflow-y-auto text-sm"
+              style={{ background: 'rgba(0,0,0,0.25)', color: 'var(--t-text)', lineHeight: '1.65' }}
+              dangerouslySetInnerHTML={{ __html: safeHtml || '<p style="color:var(--t-text-muted)">(空)</p>' }} />
+          </div>
+        )}
+        {view === 'source' && (
+          <pre className="flex-1 p-3 rounded-lg text-[11px] font-mono whitespace-pre-wrap break-words overflow-auto min-h-0"
+            style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', lineHeight: '1.6' }}>
+            {md || '(空)'}
+          </pre>
+        )}
+        {view === 'cited' && (
+          <pre className="flex-1 p-3 rounded-lg text-[11px] font-mono whitespace-pre-wrap break-words overflow-auto min-h-0"
+            style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text)', lineHeight: '1.6' }}>
+            {dcResult.markdown_with_citations || '(无引用)'}
+          </pre>
+        )}
+        {view === 'meta' && (
+          <div className="flex-1 space-y-2 text-[11px] overflow-y-auto min-h-0">
+            <div className="rounded p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <div className="font-semibold mb-1" style={{ color: 'var(--t-text-secondary)' }}>📄 页面元数据</div>
+              <div className="space-y-0.5" style={{ color: 'var(--t-text-muted)' }}>
+                {dcResult.metadata.title && <div>标题: <span style={{ color: 'var(--t-text)' }}>{dcResult.metadata.title}</span></div>}
+                {dcResult.metadata.description && <div>描述: <span style={{ color: 'var(--t-text)' }}>{dcResult.metadata.description}</span></div>}
+                {dcResult.metadata.author && <div>作者: <span style={{ color: 'var(--t-text)' }}>{dcResult.metadata.author}</span></div>}
+                {dcResult.metadata.canonical && <div className="truncate">规范: <a href={dcResult.metadata.canonical} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--t-accent-light)' }}>{dcResult.metadata.canonical}</a></div>}
+                {dcResult.metadata.lang && <div>语言: <span style={{ color: 'var(--t-text)' }}>{dcResult.metadata.lang}</span></div>}
+                {dcResult.metadata.keywords && <div>关键词: <span style={{ color: 'var(--t-text)' }}>{dcResult.metadata.keywords}</span></div>}
+              </div>
+            </div>
+            <div className="rounded p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <div className="font-semibold mb-1" style={{ color: 'var(--t-text-secondary)' }}>🔗 链接 ({dcResult.internal_links.length + dcResult.external_links.length})</div>
+              <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-0.5">
+                {[...dcResult.internal_links, ...dcResult.external_links].slice(0, 80).map((l, i) => (
+                  <a key={i} href={l.href} target="_blank" rel="noopener noreferrer"
+                    className="rounded p-1 truncate text-[10px] block hover:bg-white/5"
+                    style={{ color: l.internal ? 'var(--t-text)' : 'var(--t-text-muted)' }} title={l.href}>
+                    {l.internal ? '🔗' : '🌐'} {l.text || l.href}
+                  </a>
+                ))}
+              </div>
+            </div>
+            {dcResult.media.length > 0 && (
+              <div className="rounded p-2" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <div className="font-semibold mb-1" style={{ color: 'var(--t-text-secondary)' }}>🖼️ 媒体 ({dcResult.media.length})</div>
+                <div className="grid grid-cols-6 gap-1 max-h-40 overflow-y-auto">
+                  {dcResult.media.slice(0, 30).map((m, i) => (
+                    <a key={i} href={m.src} target="_blank" rel="noopener noreferrer" className="rounded p-1 block" style={{ background: 'rgba(0,0,0,0.3)' }} title={m.src}>
+                      {m.type === 'image' ? (
+                        <img src={m.src} alt={m.alt} className="w-full h-12 object-cover rounded"
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
+                        <div className="h-12 flex items-center justify-center" style={{ color: 'var(--t-text-muted)' }}>🎬</div>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Smart crawler: render pages list
+  if (kind === 'crawler' && crResult) {
+    const succ = crResult.stats.success, fail = crResult.stats.failed, cached = crResult.stats.fromCache;
+    const succRate = crResult.pages.length > 0 ? (succ / crResult.pages.length * 100).toFixed(0) : '0';
+    const totalChars = crResult.pages.reduce((sum, x) => sum + (x.markdown?.length || 0), 0);
+    const copy = (s: string) => navigator.clipboard?.writeText(s);
+    const download = (s: string, fn: string, m: string) => { const b = new Blob([s], { type: m }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = fn; a.click(); URL.revokeObjectURL(a.href); };
+    return (
+      <div className="space-y-3 h-full flex flex-col">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex rounded-lg overflow-hidden text-xs" style={{ border: '1px solid var(--t-glass-border)' }}>
+            {[
+              { l: '总页', v: crResult.pages.length, c: 'var(--t-text)' },
+              { l: '✓ 成功', v: succ, c: '#4ade80' },
+              { l: '✗ 失败', v: fail, c: '#f87171' },
+              { l: '💾 缓存', v: cached, c: '#fbbf24' },
+            ].map((s, i) => (
+              <div key={i} className="px-3 py-1 text-center" style={{ borderRight: i < 3 ? '1px solid var(--t-glass-border)' : undefined }}>
+                <span className="font-semibold mr-1" style={{ color: s.c }}>{s.v}</span>
+                <span style={{ color: 'var(--t-text-muted)' }}>{s.l}</span>
+              </div>
+            ))}
+          </div>
+          <span className="text-xs" style={{ color: 'var(--t-text-muted)' }}>
+            成功率 <b style={{ color: '#4ade80' }}>{succRate}%</b> · ⏱ {(crResult.stats.durationMs / 1000).toFixed(1)}s · 📝 {(totalChars / 1024).toFixed(1)}k 字符
+          </span>
+          <div className="flex-1" />
+          <button onClick={() => setCrExpanded(new Set(crResult.pages.map((_, i) => i)))} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-muted)' }}>展开</button>
+          <button onClick={() => setCrExpanded(new Set())} className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-muted)' }}>收起</button>
+          <button onClick={onOpenFullscreen} className="px-2.5 py-1 rounded flex items-center gap-1" style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}>
+            <Maximize2 className="h-3.5 w-3.5" />全屏
+          </button>
+        </div>
+        <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+          {crResult.pages.map((pg, i) => {
+            const isOpen = crExpanded.has(i);
+            const titleMatch = pg.markdown?.match(/^#+\s*(.+)/m);
+            const title = titleMatch?.[1]?.trim() || pg.url.split('/').filter(Boolean).pop() || pg.url;
+            return (
+              <div key={i} className="rounded-lg overflow-hidden" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid var(--t-glass-border)' }}>
+                <div className="flex items-start gap-3 p-3 cursor-pointer hover:bg-white/5" onClick={() => { const n = new Set(crExpanded); n.has(i) ? n.delete(i) : n.add(i); setCrExpanded(n); }}>
+                  <div className="text-base pt-0.5">{pg.ok ? (pg.fromCache ? '💾' : '✓') : '✗'}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 text-[10px] flex-wrap" style={{ color: 'var(--t-text-muted)' }}>
+                      <span className="px-1 rounded" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--t-accent-light)' }}>深{pg.depth}</span>
+                      {pg.score != null && <span className="px-1 rounded" style={{ background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>分{pg.score.toFixed(2)}</span>}
+                      <span>{(pg.sizeBytes / 1024).toFixed(1)}k</span>
+                      <span>·</span>
+                      <span>{pg.durationMs}ms{pg.retries > 0 ? ` ×${pg.retries}` : ''}</span>
+                    </div>
+                    <div className="text-sm font-semibold mt-0.5" style={{ color: 'var(--t-text)' }}>{pg.ok ? title : `❌ ${pg.error?.slice(0, 80) || '抓取失败'}`}</div>
+                    <div className="text-[10px] truncate" style={{ color: 'var(--t-text-muted)' }} title={pg.url}>{pg.url}</div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+                    <span>{isOpen ? '▲' : '▼'}</span>
+                    {(pg.internalLinks.length + pg.externalLinks.length) > 0 && <span>🔗{pg.internalLinks.length + pg.externalLinks.length}</span>}
+                  </div>
+                </div>
+                {isOpen && (
+                  <div className="border-t p-3 space-y-2" style={{ borderColor: 'var(--t-glass-border)', background: 'rgba(0,0,0,0.15)' }}>
+                    <div className="flex flex-wrap gap-1.5 text-[10px]">
+                      <a href={pg.url} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 flex items-center gap-1"><ExternalLink className="h-3 w-3" />打开</a>
+                      <button onClick={(e) => { e.stopPropagation(); copy(pg.markdown || ''); }} className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>📋 复制 MD</button>
+                      <button onClick={(e) => { e.stopPropagation(); download(pg.markdown || '', `${pg.url.replace(/[^a-z0-9]+/gi, '-').slice(-40)}.md`, 'text/markdown'); }} className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10" style={{ color: 'var(--t-text-secondary)' }}>💾 下载 MD</button>
+                    </div>
+                    {pg.markdown ? (
+                      <pre className="p-2 rounded text-[10px] font-mono whitespace-pre-wrap break-words max-h-80 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.3)', color: 'var(--t-text-secondary)' }}>{pg.markdown}</pre>
+                    ) : <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>(无内容)</div>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  return null;
 }
+
 
 // ====================================================================
 // Schema Extractor Sub-Panel
@@ -2885,6 +3083,19 @@ export function BrowserAutomationPage() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
+        {((toolTab === 'deepcrawl' && dcResult) || (toolTab === 'crawler' && crResult)) ? (
+          /* Result occupies the whole main area */
+          <div className="flex-1 p-6 overflow-y-auto">
+            {(toolTab === 'deepcrawl' && dcResult) ? (
+              <CrawlResultCenter kind="deepcrawl" dcResult={dcResult}
+                onOpenFullscreen={() => { setDcFsView(dcView); setDcFsOpen(true); }} />
+            ) : (toolTab === 'crawler' && crResult) ? (
+              <CrawlResultCenter kind="crawler" crResult={crResult}
+                onOpenFullscreen={() => setCrFsOpen(true)} />
+            ) : null}
+          </div>
+        ) : (
+        <>
         {/* Left Panel - Sessions */}
         <div className="w-64 border-r p-4 overflow-y-auto" style={{ borderColor: 'var(--t-glass-border)' }}>
           <h3 className="text-xs font-medium mb-3 flex items-center gap-2" style={{ color: 'var(--t-text-muted)' }}>
@@ -3197,6 +3408,7 @@ export function BrowserAutomationPage() {
             </div>
           )}
         </div>
+        </>)}
       </div>
     </div>
   );
